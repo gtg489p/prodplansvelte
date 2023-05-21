@@ -1,0 +1,6 @@
+import moment from 'moment';
+
+export function time(input) {
+    const timeObject = moment(input, 'HH:mm');
+    return timeObject;
+}
