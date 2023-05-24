@@ -6,20 +6,36 @@ export default function getDummyGanttData() {
   return {
     rows: [{
         id: 1,
-        label: "Tank 1",
+        label: "Mix 1",
+        category: "mix",
+        size: 10000
     }, {
         id: 2,
-        label: "Tank 2",
+        label: "Mix 2",
+        category: "mix"
     }, {
         id: 3,
-        label: "Tank 3"
+        label: "Mix 3",
+        category: "mix"
     }, {
         id: 4,
-        label: "Line 1"
+        label: "Holding Tank 1",
+        category: "holding"
     }, {
         id: 5,
-        label: "Line 2"
-    }],
+        label: "Holding Tank 2",
+        category: "holding"
+    }, {
+      id: 6,
+      label: "Line 2",
+      category: "fill"
+  }, {
+    id: 7,
+    label: "Line 2",
+    category: "fill"
+}
+  
+  ],
     tasks: [
         {
             id: 1,
@@ -27,6 +43,12 @@ export default function getDummyGanttData() {
             label: "Job 1",
             from: new Date(time("12:00")).getTime(),
             to: new Date(time("15:00")).getTime(),
+            product: 'Shampoo A',
+            category: "job",
+            processTime: 10800000, // 3 hours,
+            setupTime: 1800000, // 0.5 hour,
+            changeoverTime: 3600000, // 1 hour,
+            idleTime: 0,
             classes: ['red-background-black-border'],
             amountDone: 55,
             showButton: true,
@@ -49,7 +71,14 @@ export default function getDummyGanttData() {
           label: "Job 2",
           from: new Date(time("8:30")).getTime(),
           to: new Date(time("12:30")).getTime(),
-          classes: ['red-middle-gradient'],
+          product: 'Shampoo A',
+          category: "job",
+          processTime: 14400000, // 4 hours
+          runTime: 14400000, // 4 hours
+          setupTime: 1800000, // 0.5 hour,
+          changeoverTime: 3600000, // 1 hour,
+          idleTime: 0,
+          classes: []
         },
         {
           id: 3,
@@ -57,6 +86,13 @@ export default function getDummyGanttData() {
           label: "Job 3",
           from: new Date(time("15:15")).getTime(),
           to: new Date(time("16:00")).getTime(),
+          product: 'Shampoo B',
+          category: "job",
+          processTime: 2700000, // 45 minutes
+          runTime: 2700000, // 45 minutes
+          setupTime: 1800000, // 0.5 hour,
+          changeoverTime: 3600000, // 1 hour,
+          idleTime: 0,
           classes: "green"
         },
         {
@@ -65,6 +101,13 @@ export default function getDummyGanttData() {
           label: "Job 4",
           from: new Date(time("14:00")).getTime(),
           to: new Date(time("17:00")).getTime(),
+          product: 'Conditioner A',
+          category: "job",
+          processTime: 10800000, // 3 hours
+          runTime: 10800000, // 3 hours
+          setupTime: 1800000, // 0.5 hour,
+          changeoverTime: 3600000, // 1 hour,
+          idleTime: 0,
           classes: "blue"
         },
         {
@@ -73,6 +116,13 @@ export default function getDummyGanttData() {
           label: "Job 5",
           from: new Date(time("13:00")).getTime(),
           to: new Date(time("14:00")).getTime(),
+          product: 'Conditioner A',
+          category: "job",
+          processTime: 3600000, // 1 hour
+          runTime: 3600000, // 1 hour
+          setupTime: 1800000, // 0.5 hour,
+          changeoverTime: 3600000, // 1 hour,
+          idleTime: 0,
           classes: "blue"
         },
         {
@@ -81,6 +131,13 @@ export default function getDummyGanttData() {
           label: "Job 6",
           from: new Date(time("14:00")).getTime(),
           to: new Date(time("15:30")).getTime(),
+          product: 'Conditioner A',
+          category: "job",
+          processTime: 5400000, // 1.5 hours
+          runTime: 5400000, // 1.5 hours
+          setupTime: 1800000, // 0.5 hour,
+          changeoverTime: 3600000, // 1 hour,
+          idleTime: 0,
           classes: "blue"
         },
         {
@@ -89,6 +146,13 @@ export default function getDummyGanttData() {
           label: "Job 7",
           from: new Date(time("15:00")).getTime(),
           to: new Date(time("17:00")).getTime(),
+          product: 'Conditioner B',
+          category: "job",
+          processTime: 5400000, // 1.5 hours
+          runTime: 5400000, // 1.5 hours
+          setupTime: 1800000, // 0.5 hour,
+          changeoverTime: 3600000, // 1 hour,
+          idleTime: 0,
           classes: "green"
         },
         {
@@ -97,6 +161,13 @@ export default function getDummyGanttData() {
           label: "Job 8",
           from: new Date(time("14:30")).getTime(),
           to: new Date(time("15:30")).getTime(),
+          product: 'Conditioner C',
+          category: "job",
+          processTime: 3600000, // 1 hour,
+          runTime: 3600000, // 1 hour,
+          setupTime: 1800000, // 0.5 hour,
+          changeoverTime: 3600000, // 1 hour,
+          idleTime: 0,
           classes: "orange"
         }
       ],
