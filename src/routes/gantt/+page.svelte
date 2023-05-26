@@ -38,7 +38,7 @@
     ganttData = (data.ganttData && Object.keys(data.ganttData).length !== 0) ? data.ganttData : getDummyGanttData();
 
     // Reactive statement to post-process ganttData whenever it changes
-    $: ganttData = postProcessGanttData(ganttData);
+    ganttData = postProcessGanttData(ganttData);
 
     function postProcessGanttData(ganttData) {
         for(let row of ganttData.rows) {
@@ -50,7 +50,6 @@
                 row.classes = "filling-row";
             }
         }
-        console.log(ganttData.rows)
         return ganttData;
     }
 
@@ -188,8 +187,11 @@
     function checkTaskOverlap(movingTask) {
         let otherTasks = gantt.getTasks(movingTask.resourceId);
         if (!otherTasks) {
-            return null;
+            return [];
         }
+
+        let bumpedTasks = []; // Array to hold bumped tasks and their overlap percentages
+
         for (let otherTask of otherTasks) {
             if (otherTask.model.id === movingTask.id || otherTask.model.category === "buffer") continue;
 
@@ -203,86 +205,102 @@
                 let overlapPct = (movingTask.from - otherTask.model.from) / (otherTask.model.to - otherTask.model.from);
                 console.log(`Task ${movingTask.id} overlapped with Task ${otherTask.model.id} on resource ${movingTask.resourceId} at ${overlapPct * 100}%`);
 
-                return {
+                bumpedTasks.push({ // Push bumped task and overlap percentage into the array
                     bumpedTask: otherTask.model,
                     overlapPct: overlapPct
-                };
+                });
             }
         }
-        return {
-            bumpedTask: null,
-            overlapPct: null
-        };
-    }
 
+        return bumpedTasks; // Return the array of bumped tasks
+    }
 
     function bumpAndGrind(movingTask) {
-    let {bumpedTask, overlapPct} = checkTaskOverlap(movingTask);
-    if (bumpedTask) {
-        // If bumpedTask is a setup task
-        // if (bumpedTask.category === "buffer") {
-        //     // Delete the setup task
-        //     removeTask(bumpedTask);
-        // } 
-        // Update the bumpedTask
-        let bumpedRuntime = (bumpedTask.to-bumpedTask.from);
-        let setupTimeOrChangeoverTime = bumpedTask.product === movingTask.product ? bumpedTask.setupTime : bumpedTask.changeoverTime;
-        
-        if (overlapPct < 0.5) {
-            // If overlapPct < 50%
-            bumpedTask.from = movingTask.to + setupTimeOrChangeoverTime;
-            bumpedTask.to = bumpedTask.from + bumpedRuntime;
+        console.log('bumpin')
+        let bumpedTasks = checkTaskOverlap(movingTask);
 
-            let setupTask = {
-                id: "setup_" + bumpedTask.id,  
-                from: movingTask.to,
-                to: bumpedTask.from,
-                resourceId: bumpedTask.resourceId,
-                label: " ",
-                runTime: setupTimeOrChangeoverTime,
-                setupTime: 0,
-                changeoverTime: 0,
-                classes: "setup-task",
-                enableDragging: false,
-                category: "buffer"
-            };
-            
-            gantt.updateTask(setupTask);
-        } else {
-            // If overlapPct >= 50%
-            bumpedTask.to = movingTask.from - setupTimeOrChangeoverTime;
-            bumpedTask.from = bumpedTask.to - bumpedRuntime;
+        // Iterate through each bumpedTask
+        for (let { bumpedTask, overlapPct } of bumpedTasks) {
+            // Update the bumpedTask
+            let bumpedRuntime = (bumpedTask.to - bumpedTask.from);
+            let setupTimeOrChangeoverTime = bumpedTask.product === movingTask.product ? bumpedTask.setupTime : bumpedTask.changeoverTime;
 
-            let setupTask = {
-                id: "setup_" + movingTask.id, 
-                from: bumpedTask.to,
-                to: movingTask.from,
-                resourceId: movingTask.resourceId,
-                label: " ",
-                runTime: setupTimeOrChangeoverTime,
-                setupTime: 0,
-                changeoverTime: 0,
-                classes: "setup-task",
-                enableDragging: false,
-                category: "buffer"
-            };
-            console.log('making buffer',setupTask)
-            gantt.updateTask(setupTask);
+            if (overlapPct < 0.5) {
+                // If overlapPct < 50%
+                bumpedTask.from = movingTask.to + setupTimeOrChangeoverTime;
+                bumpedTask.to = bumpedTask.from + bumpedRuntime;
+            } else {
+                // If overlapPct >= 50%
+                bumpedTask.to = movingTask.from - setupTimeOrChangeoverTime;
+                bumpedTask.from = bumpedTask.to - bumpedRuntime;
+            }
+
+            // Use the updateTask method from Svelte Gantt to redraw the bumped task
+            gantt.updateTask(bumpedTask);
+
+            // Recursively call bumpAndGrind with the bumpedTask
+            bumpAndGrind(bumpedTask);
         }
 
-        // Use the updateTask method from Svelte Gantt to redraw the bumped task
-        gantt.updateTask(bumpedTask);
-        updateGanttData(ganttData, bumpedTask);
-        
+        addBuffers();
     }
-    else{
-        let setupTask = gantt.getTask("setup_" + movingTask.id);
-        console.log('movingTask', movingTask, 'setupTask', setupTask)
-        if (setupTask) {
-            removeTask(setupTask.model);
+
+
+
+    async function addBuffers() {
+        // Remove tasks that start with "buffer_"
+        ganttData.tasks = ganttData.tasks.filter(task => !String(task.id).startsWith("buffer_"));
+        console.log('add/kill buffers', ganttData.tasks)
+        // Update the Gantt chart
+        options.tasks = ganttData.tasks;
+        gantt.$set(options);
+        for (let row of ganttData.rows) {
+            // Get tasks for current row
+            let rowTasks = await gantt.getTasks(row.id);
+            // If rowTasks is null, set it to an empty array
+            if (rowTasks === null) {
+                rowTasks = [];
+            }
+            // Compare each task with all other tasks in the row
+            for (let i = 0; i < rowTasks.length; i++) {
+                for (let j = 0; j < rowTasks.length; j++) {
+                    if (i == j) continue; // Skip when the tasks are the same
+
+                    let taskA = rowTasks[i];
+                    let taskB = rowTasks[j];
+
+                    // Calculate setup/changeover time
+                    let setupTimeOrChangeoverTime = taskA.model.product === taskB.model.product ? taskA.model.setupTime : taskA.model.changeoverTime;
+
+                    // Check if tasks are separated by their setup/changeover buffer times
+                    if (taskB.model.from - taskA.model.to === setupTimeOrChangeoverTime) {
+                        // Create a new buffer task
+                        let bufferTask = {
+                            id: "buffer_" + taskA.model.id,
+                            from: taskA.model.to,
+                            to: taskB.model.from,
+                            resourceId: taskA.model.resourceId,
+                            label: " ",
+                            runTime: setupTimeOrChangeoverTime,
+                            setupTime: 0,
+                            changeoverTime: 0,
+                            classes: "setup-task",
+                            enableDragging: false,
+                            category: "buffer"
+                        };
+
+                        // Add the buffer task to ganttData.tasks
+                        ganttData.tasks.push(bufferTask);
+                        
+                        // Update the buffer task on the Gantt chart
+                        gantt.updateTask(bufferTask);
+                    }
+                }
+            }
         }
     }
-}
+
+
 
 
     function doesTaskStartInBreak(movingTask, timeRanges) {
@@ -360,25 +378,10 @@
         // Listen for the task drop event
 
  
-        gantt.api.tasks.on.changed((event) => {
+        gantt.api.tasks.on.changed(async (event) => {
             let movingTask = event[0].task.model
             console.log('movingTask', movingTask)
-            // Anytime we move a task, lets remove the setup task just to clean things up, it can return if needed
-            let setupTask = gantt.getTask("setup_" + movingTask.id);
-            console.log('movingTask', movingTask, 'setupTask', setupTask)
-            // if (setupTask) {
-            //     removeTask(setupTask.model);
-            // }
-                    
-            // Check if task starts in break
-            let startInBreak = doesTaskStartInBreak(movingTask, timeRanges);
-            if (startInBreak){
-                console.log('task would start IN break',startInBreak)
-                updateGanttData(ganttData, originalTaskState)
-                gantt.$set(options);
-                return;
-            }
-    
+
             // check if task is resized
             if ((movingTask.to - movingTask.from) !== (originalTaskState.to - originalTaskState.from)) {
                 console.log('The task has been resized');
@@ -387,11 +390,12 @@
                 movingTask.runTime = movingTask.to - movingTask.from;
 
                 console.log('New runTime: ', movingTask.runTime);
+                gantt.updateTask(movingTask);
             }
 
             // check if task overlaps a break
             let { breakOverlapTime, timeRangeDuration } = getBreakOverlapTimeAndDuration(movingTask, timeRanges);
-            if (breakOverlapTime > 0){
+            if (breakOverlapTime > 0 && movingTask.category !== 'Hold'){
                 console.log('breakOverlapTime', breakOverlapTime / 60000);
                 // Create a clone of the movingTask
                 let movingTaskClone = {...movingTask};
@@ -399,16 +403,17 @@
                 // Extend the end date of the task by the full duration of the overlapping timeRange
                 movingTaskClone.to += timeRangeDuration;
 
-                // Send the updated task to the function
-                updateGanttData(ganttData, movingTaskClone);
-                gantt.$set(options);
-                return;
+                gantt.updateTask(movingTaskClone);
             }
 
             // Check if we bumpin
             bumpAndGrind(movingTask);
-            
+
+            //syncGanttData();
+
+            // Save to redis
             saveGanttData(ganttData);
+            
         });
 
 
@@ -476,33 +481,68 @@
 
     function snapback() {
         console.log('snapback')
-        
 
-    };
+        ganttData.rows.forEach(row => {
+            const tasks = gantt.getTasks(row.id);
+            if(tasks){
+                tasks.forEach(task => {
+                    let taskData = task.model;
+                    // Find task in ganttData.tasks by id
+                    let existingTask = ganttData.tasks.find(task => task.id === taskData.id);
 
-    function updateGanttData(ganttData, taskUpdate) {
-        ganttData.tasks.forEach(task => {
-            if (task.id === taskUpdate.id) {
-                task.resourceId = taskUpdate.resourceId;
-                task.from = taskUpdate.from;
-                task.to = taskUpdate.to
+                    if(existingTask){
+                        // Update existing properties and add new properties
+                        Object.keys(taskData).forEach(prop => {
+                            existingTask[prop] = taskData[prop];
+                        });
+                    } else {
+                        // Insert new task in ganttData.tasks
+                        ganttData.tasks.push(taskData);
+                    }
+                });
             }
         });
-    }
+        console.log('ganttData post zoink', ganttData)
+    };
+
+    function syncGanttData() {
+        console.log('we syncing', ganttData.tasks)
+
+        ganttData.rows.forEach(row => {
+            const tasks = gantt.getTasks(row.id);
+            if(tasks){
+                tasks.forEach(task => {
+                    let taskData = task.model;
+                    // Find task in ganttData.tasks by id
+                    let existingTask = ganttData.tasks.find(task => task.id === taskData.id);
+
+                    if(existingTask){
+                        // Update existing properties and add new properties
+                        Object.keys(taskData).forEach(prop => {
+                            existingTask[prop] = taskData[prop];
+                        });
+                    } else {
+                        // Insert new task in ganttData.tasks
+                        ganttData.tasks.push(taskData);
+                    }
+                });
+            }
+        });
+
+        saveGanttData(ganttData);
+    };
 
     function removeTask(doomedTask) {
-        console.log('killing', doomedTask)
-        // Find the task in the tasks array
-        let doomedTaskIndex = ganttData.tasks.findIndex(task => task.id === doomedTask.id);
+
+        const doomedTaskIndex = ganttData.tasks.findIndex(task => task.id === doomedTask.id);
 
         // If found, remove it
         if (doomedTaskIndex >= 0) {
             ganttData.tasks.splice(doomedTaskIndex, 1);
         }
-
-        // Update the Gantt chart
+        // Update the Gantt chart with the modified options
         gantt.$set(options);
-
+    
         // Update the saved Gantt data
         saveGanttData(ganttData);
     }
@@ -699,6 +739,9 @@
 
         <button on:click={wipeGanttData}><Icon icon="ion:trash-sharp" width="30" height="30" color="red"/></button>
         <Tooltip  color="yellow">Clear</Tooltip>
+
+        <button on:click={syncGanttData}><Icon icon="material-symbols:save-sharp" width="30" height="30" color="red"/></button>
+        <Tooltip  color="yellow">Save</Tooltip>
         
     </div>
 </header>
