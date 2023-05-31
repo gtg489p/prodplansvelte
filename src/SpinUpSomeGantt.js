@@ -6,53 +6,70 @@ export default function getDummyGanttData() {
   return {
     rows: [{
         id: 1,
-        label: "Mixing Tank 1",
+        label: "Mixer 1, 48k Lbs, Direct",
+        name: "Mixer 1",
         category: "Mix",
-        size: 10000
+        size: 48000
     }, 
     {
         id: 2,
-        label: "Mixing Tank 2",
-        category: "Mix"
+        label: "Mixer 2 - 48k Lbs",
+        name: "Mixer 2",
+        category: "Mix",
+        size: 48000
     }, 
     {
         id: 3,
-        label: "Mixing Tank 3",
-        category: "Mix"
+        label: "Mixer 3 - 24k Lbs",
+        name: "Mixer 3",
+        category: "Mix",
+        size: 24000
     }, 
     {
         id: 4,
-        label: "Hold Tank 1",
-        category: "Hold"
+        label: "Holding 1 - 24k Lbs",
+        name: "Holding 1",
+        category: "Hold",
+        size: 24000
     }, 
     {
         id: 5,
-        label: "Hold Tank 2",
-        category: "Hold"
+        label: "Holding 2 - 24k Lbs",
+        name: "Holding 2",
+        category: "Hold",
+        size: 24000
     },
     {
         id: 6,
-        label: "Hold Tank 3",
-        category: "Hold"
+        label: "Holding 3 - 24k Lbs",
+        name: "Holding 3",
+        category: "Hold",
+        size: 24000
     },
   {
       id: 7,
-      label: "Hold Tank 4",
-      category: "Hold"
+      label: "Holding 4 - 4k Lbs",
+      name: "Holding 4",
+      category: "Hold",
+      size: 4000
   },
   {
       id: 8,
-      label: "Hold Tank 5",
-      category: "Hold"
+      label: "Holding 5 - 4k Lbs",
+      name: "Holding 5",
+      category: "Hold",
+      size: 4000
   },
     {
       id: 9,
-      label: "Fill Line 1",
+      label: "Filler 1",
+      name: "Filler 1",
       category: "Fill"
   }, 
   {
     id: 10,
-    label: "Fill Line 2",
+    label: "Filler 2",
+    name: "Filler 2",
     category: "Fill"
 }
   
@@ -60,13 +77,16 @@ export default function getDummyGanttData() {
     tasks: [
         {
             id: 1,
+            job: "Job 1",
             resourceId: 1,
-            label: "Mix 30k Lbs Shampoo A",
+            label: "Mix Job 1",
             from: new Date(time("6:00")).getTime(),
             to: new Date(time("10:00")).getTime(),
             product: 'Shampoo A',
             category: "Mix",
+            lbs: 48000,
             processTime: 10800000, // 4 hours,
+            runTime: 10800000, // 4 hours,
             setupTime: 900000, // 15 min,
             changeoverTime: 3600000, // 1 hour,
             idleTime: 0,
@@ -88,12 +108,14 @@ export default function getDummyGanttData() {
         
         {
           id: 2,
+          job: "Job 1",
           resourceId: 4,
-          label: "Hold 10k Lbs Shampoo A",
+          label: "Hold Job 1",
           from: new Date(time("6:00")).getTime(),
           to: new Date(time("8:00")).getTime(),
           product: 'Shampoo A',
           category: "Hold",
+          lbs: 24000,
           processTime: 7200000, // 2 hours
           runTime: 7200000, // 2 hours
           setupTime: 900000, // 15 min,
@@ -103,12 +125,14 @@ export default function getDummyGanttData() {
         },
         {
           id: 3,
+          job: "Job 1",
           resourceId: 5,
-          label: "Hold 10k Lbs Shampoo A",
+          label: "Hold Job 1",
           from: new Date(time("6:00")).getTime(),
           to: new Date(time("8:00")).getTime(),
           product: 'Shampoo A',
           category: "Hold",
+          lbs: 24000,
           processTime: 7200000, // 2 hours
           runTime: 7200000, // 2 hours
           setupTime: 900000, // 15 min,
@@ -118,14 +142,16 @@ export default function getDummyGanttData() {
         },
         {
           id: 4,
-          resourceId: 6,
-          label: "Hold 10k Lbs Shampoo A",
-          from: new Date(time("6:00")).getTime(),
-          to: new Date(time("8:00")).getTime(),
+          job: "Job 1",
+          resourceId: 9,
+          label: "Fill Job 1",
+          from: new Date(time("11:00")).getTime(),
+          to: new Date(time("11:00")).getTime() + 21600000,
           product: 'Shampoo A',
-          category: "Hold",
-          processTime: 7200000, // 2 hours
-          runTime: 7200000, // 2 hours
+          category: "Fill",
+          lbs: 24000,
+          processTime: 21600000, // 6 hour
+          runTime: 21600000, // 6 hour
           setupTime: 900000, // 15 min,
           changeoverTime: 3600000, // 1 hour,
           idleTime: 0,
@@ -133,59 +159,32 @@ export default function getDummyGanttData() {
         },
         {
           id: 5,
+          job: "Job 1",
           resourceId: 9,
-          label: "Fill 10k Lbs Shampoo A",
-          from: new Date(time("6:00")).getTime(),
-          to: new Date(time("8:00")).getTime(),
+          label: "Fill Job 1",
+          from: new Date(time("11:00")).getTime() + 21600000 + 3600000/2,
+          to: new Date(time("11:00")).getTime() + 21600000 + 21600000 ,
           product: 'Shampoo A',
           category: "Fill",
-          processTime: 7200000, // 2 hour
-          runTime: 7200000, // 2 hour
+          lbs: 24000,
+          processTime: 21600000, // 6 hour
+          runTime: 21600000, // 6 hour
           setupTime: 900000, // 15 min,
           changeoverTime: 3600000, // 1 hour,
           idleTime: 0,
           classes: []
         },
-        {
-          id: 6,
-          resourceId: 9,
-          label: "Fill 10k Lbs Shampoo A",
-          from: new Date(time("8:00")).getTime(),
-          to: new Date(time("10:00")).getTime(),
-          product: 'Shampoo A',
-          category: "Fill",
-          processTime: 7200000, // 2 hour
-          runTime: 7200000, // 2 hour
-          setupTime: 900000, // 15 min,
-          changeoverTime: 3600000, // 1 hour,
-          idleTime: 0,
-          classes: []
-        },
-        {
-          id: 7,
-          resourceId: 9,
-          label: "Fill 10k Lbs Shampoo A",
-          from: new Date(time("10:00")).getTime(),
-          to: new Date(time("12:00")).getTime(),
-          product: 'Shampoo A',
-          category: "Fill",
-          processTime: 7200000, // 2 hour
-          runTime: 7200000, // 2 hour
-          setupTime: 900000, // 15 min,
-          changeoverTime: 3600000, // 1 hour,
-          idleTime: 0,
-          classes: []
-        },
-
         
         {
-          id: 8,
+          id: 7,
+          job: "Job 2",
           resourceId: 2,
-          label: "Mix 30k Lbs Conditioner A",
+          label: "Mix Job 2",
           from: new Date(time("6:00")).getTime(),
           to: new Date(time("12:00")).getTime(),
           product: 'Conditioner A',
           category: "Mix",
+          lbs: 48000,
           processTime: 21600000 , // 6 hour
           runTime: 21600000 , // 6 hour
           setupTime: 900000, // 15 min,
@@ -194,13 +193,15 @@ export default function getDummyGanttData() {
           classes: []
         },
         {
-          id: 9,
+          id: 8,
+          job: "Job 2",
           resourceId: 10,
-          label: "Fill 30k Lbs Conditioner A",
+          label: "Fill Job 2",
           from: new Date(time("12:00")).getTime(),
           to: new Date(time("18:00")).getTime(),
           product: 'Conditioner A',
           category: "Fill",
+          lbs: 48000,
           processTime: 21600000 , // 6 hour
           runTime: 21600000 , // 6 hour
           setupTime: 900000, // 15 min,
@@ -221,29 +222,19 @@ export default function getDummyGanttData() {
         toId: 3
     }, 
     {
-        id: 3,
-        fromId: 1,
-        toId: 4
-    }, 
-    {
         id: 4,
         fromId: 2,
-        toId: 5
+        toId: 4
     }, 
     {
         id: 5,
         fromId: 3,
-        toId: 6
-    }, 
-    {
-        id: 6,
-        fromId: 4,
-        toId: 7
+        toId: 5
     }, 
     {
         id: 7,
-        fromId: 8,
-        toId: 9
+        fromId: 7,
+        toId: 8
     }, 
 
   ]

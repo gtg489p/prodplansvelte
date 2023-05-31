@@ -42,15 +42,20 @@
 
     function postProcessGanttData(ganttData) {
         for(let row of ganttData.rows) {
-            if(row.category === "mix") {
+            if(row.category === "Mix") {
                 row.classes = "mix-row";
-            } else if(row.category === "holding") {
+            } else if(row.category === "Hold") {
                 row.classes = "holding-row";
-            } else if(row.category === "fill") {
+            } else if(row.category === "Fill") {
                 row.classes = "filling-row";
             }
         }
         return ganttData;
+    }
+
+    let productInfo={
+        'Shampoo A':{'category':'Shampoo','pumpRateLbsPerMin': 150},
+        'Conditioner A':{'category':'Conditioner','pumpRateLbsPerMin': 200},
     }
 
     let options = {
@@ -63,11 +68,11 @@
         magnetOffset: 15,
         rowHeight: 40,
         rowPadding: 6,
-        headers: [{ unit: 'day', format: 'MMMM Do' }, { unit: 'hour', format: 'H:mm' }],
+        headers: [{ unit: 'day', format: 'MM.DD.YYYY' }, { unit: 'hour', format: 'HH' }],
         fitWidth: true,
         minWidth: 1000,
-        from: currentStart,
-        to: currentEnd,
+        from: currentStart.clone().startOf('day'),
+        to: currentStart.clone().endOf('day'),
         tableHeaders: [{ title: 'Label', property: 'label', width: 140, type: 'tree' }],
         tableWidth: 140,
         ganttTableModules: [SvelteGanttTable],
@@ -84,19 +89,13 @@
                 }
             }
 
-            const mouseMoveHandler = () => {
-                console.log('Dragging task:', task);
-            };
-
             addMouseDownEventListener(node, task);
             node.addEventListener('mouseenter', onHover);
             node.addEventListener('mouseleave', onLeave);
-            //node.addEventListener('mousemove', mouseMoveHandler);
             return {
                 destroy() {
                     node.removeEventListener('mouseenter', onHover);
                     node.removeEventListener('mouseleave', onLeave);
-                    node.removeEventListener('mousemove', mouseMoveHandler);
                 }
             }
         },
@@ -193,7 +192,7 @@
         let bumpedTasks = []; // Array to hold bumped tasks and their overlap percentages
 
         for (let otherTask of otherTasks) {
-            if (otherTask.model.id === movingTask.id || otherTask.model.category === "buffer") continue;
+            if (otherTask.model.id === movingTask.id || otherTask.model.category === "Setup") continue;
 
             let rangeStart = otherTask.model.from - (otherTask.model.product === movingTask.product ? otherTask.model.setupTime : otherTask.model.changeoverTime);
             let rangeEnd = otherTask.model.to + (otherTask.model.product === movingTask.product ? movingTask.setupTime : movingTask.changeoverTime);
@@ -218,7 +217,6 @@
     function bumpAndGrind(movingTask) {
         console.log('bumpin')
         let bumpedTasks = checkTaskOverlap(movingTask);
-
         // Iterate through each bumpedTask
         for (let { bumpedTask, overlapPct } of bumpedTasks) {
             // Update the bumpedTask
@@ -242,15 +240,40 @@
             bumpAndGrind(bumpedTask);
         }
 
-        addBuffers();
+        addsetups();
+        
+    }
+
+    function deleteAndCloneTask(originalTask) {
+        // Create a clone of originalTask
+        let cloneTask = JSON.parse(JSON.stringify(originalTask));
+        // Get all tasks
+        let allTasks = getAllTasks(); // replace this with your function to get all tasks
+
+        // Find the maximum id among all tasks
+        let maxId = Math.max(...allTasks.filter(task => !isNaN(task.id)).map(task => Number(task.id)));
+
+        // Assign a new id to cloneTask by incrementing the maximum id by 1
+        console.log('maxId', maxId)
+        cloneTask.id = maxId + 1;
+
+        // Remove originalTask from ganttData.tasks
+        ganttData.tasks = ganttData.tasks.filter(task => task.id !== originalTask.id);
+        // Update the Gantt chart
+        options.tasks = ganttData.tasks;
+        gantt.$set(options);
+
+        // After deleting the original task, add the cloneTask to the Gantt chart
+        ganttData.tasks.push(cloneTask);
+        gantt.updateTask(cloneTask);
     }
 
 
 
-    async function addBuffers() {
-        // Remove tasks that start with "buffer_"
-        ganttData.tasks = ganttData.tasks.filter(task => !String(task.id).startsWith("buffer_"));
-        console.log('add/kill buffers', ganttData.tasks)
+    async function addsetups() {
+        // Remove tasks that start with "setup_"
+        ganttData.tasks = ganttData.tasks.filter(task => task.category !== "Setup");
+        console.log('add/kill setups', ganttData.tasks)
         // Update the Gantt chart
         options.tasks = ganttData.tasks;
         gantt.$set(options);
@@ -272,11 +295,11 @@
                     // Calculate setup/changeover time
                     let setupTimeOrChangeoverTime = taskA.model.product === taskB.model.product ? taskA.model.setupTime : taskA.model.changeoverTime;
 
-                    // Check if tasks are separated by their setup/changeover buffer times
+                    // Check if tasks are separated by their setup/changeover times
                     if (taskB.model.from - taskA.model.to === setupTimeOrChangeoverTime) {
-                        // Create a new buffer task
-                        let bufferTask = {
-                            id: "buffer_" + taskA.model.id,
+                        // Create a new setup task
+                        let setupTask = {
+                            id: "setup_" + taskA.model.id+"_"+taskB.model.id,
                             from: taskA.model.to,
                             to: taskB.model.from,
                             resourceId: taskA.model.resourceId,
@@ -286,19 +309,103 @@
                             changeoverTime: 0,
                             classes: "setup-task",
                             enableDragging: false,
-                            category: "buffer"
+                            category: "Setup"
                         };
 
-                        // Add the buffer task to ganttData.tasks
-                        ganttData.tasks.push(bufferTask);
+                        // Add the setup task to ganttData.tasks
+                        ganttData.tasks.push(setupTask);
                         
-                        // Update the buffer task on the Gantt chart
-                        gantt.updateTask(bufferTask);
+                        // Update the setup task on the Gantt chart
+                        gantt.updateTask(setupTask);
                     }
                 }
             }
         }
     }
+
+    function addPumps() {
+        // Remove current pump tasks
+        ganttData.tasks = ganttData.tasks.filter(task => task.category !== "Pump");
+
+        // Create a hash map for tasks
+        let taskMap = {};
+        getAllTasks().forEach(task => taskMap[task.id] = task);
+
+        // Create a hash map for dependencies
+        let dependencyMap = {};
+        ganttData.dependencies.forEach(dep => {
+            if (!dependencyMap[dep.fromId]) dependencyMap[dep.fromId] = [];
+            dependencyMap[dep.fromId].push(dep.toId);
+        });
+
+        // Filter out the mix tasks
+        const mixTasks = getAllTasks().filter(task => task.category === "Mix");
+
+        // For each mix task, compute and add a pump task
+        mixTasks.forEach(mixTask => {
+            // Get dependencies of the current mix task
+            let dependencies = dependencyMap[mixTask.id] || [];
+
+            // Get subsequent tasks of the current mix task which are of the "Hold" category
+            let subsequentHoldTasks = dependencies
+                .map(depId => taskMap[depId])
+                .filter(task => task && task.category === "Hold");
+
+            if (!subsequentHoldTasks.length) {
+                return;
+            }
+
+            // Sort the hold tasks by the "from" time of their child fill task
+            subsequentHoldTasks.sort((a, b) => {
+                let fillTaskA = dependencyMap[a.id]?.[0];
+                let fillTaskB = dependencyMap[b.id]?.[0];
+                return (taskMap[fillTaskA]?.from || 0) - (taskMap[fillTaskB]?.from || 0);
+            });
+
+            // For each hold task, create a pump task
+            subsequentHoldTasks.forEach(holdTask => {
+                // Compute the pump duration
+                let pumpDuration = Math.ceil(holdTask.lbs / (productInfo[mixTask.product]?.pumpRateLbsPerMin ?? 200) / 15) * 15 * 60000;
+
+                // Find all existing pump tasks for this mixTask on the same resource
+                let existingPumpTasks = ganttData.tasks.filter(task => task.category === "Pump" && task.mixId === mixTask.id && task.resourceId === mixTask.resourceId);
+
+                // Get the maximum "to" time of the existing pump tasks
+                let maxPumpTo = Math.max(...existingPumpTasks.map(task => task.to), mixTask.to);
+
+                // Start of the pump task is the maximum of the hold task "from" time and the max "to" time of the existing pump tasks
+                let pumpFrom = Math.max(holdTask.from, maxPumpTo);
+                // End of the pump task is the start time + the pump duration
+                let pumpTo = pumpFrom + pumpDuration;
+
+                // Create a new pump task
+                let pumpTask = {
+                    id: "pump_" + mixTask.id + '_to_' + holdTask.id,
+                    from: pumpFrom,
+                    to: pumpTo,
+                    resourceId: mixTask.resourceId,
+                    mixId: mixTask.id,
+                    label: "Pump to: " + gantt.getRow(holdTask.resourceId).model.name,
+                    product: mixTask.product,
+                    runTime: pumpDuration,
+                    setupTime: 0,
+                    changeoverTime: 0,
+                    classes: "setup-task",
+                    enableDragging: false,
+                    category: "Pump"
+                };
+
+                // Add the pump task to ganttData.tasks
+                ganttData.tasks.push(pumpTask);
+            });
+        });
+
+        // Update the Gantt chart
+        options.tasks = ganttData.tasks;
+        gantt.$set(options);
+    }
+
+
 
 
 
@@ -376,11 +483,18 @@
         });
 
         // Listen for the task drop event
+        gantt.api.tasks.on.dblclicked((task) => {
+            console.log("Task is select:", task);
+        });
 
  
-        gantt.api.tasks.on.changed(async (event) => {
-            let movingTask = event[0].task.model
-            console.log('movingTask', movingTask)
+        gantt.api.tasks.on.changed ( (event) => {
+            let movingTask = event[0].task.model;
+            console.log('movingTask', movingTask);
+
+            addHoldDependencies();
+
+            updateAllHoldingTasks();
 
             // check if task is resized
             if ((movingTask.to - movingTask.from) !== (originalTaskState.to - originalTaskState.from)) {
@@ -393,26 +507,28 @@
                 gantt.updateTask(movingTask);
             }
 
-            // check if task overlaps a break
-            let { breakOverlapTime, timeRangeDuration } = getBreakOverlapTimeAndDuration(movingTask, timeRanges);
-            if (breakOverlapTime > 0 && movingTask.category !== 'Hold'){
-                console.log('breakOverlapTime', breakOverlapTime / 60000);
-                // Create a clone of the movingTask
-                let movingTaskClone = {...movingTask};
+            // // check if task overlaps a break
+            // let { breakOverlapTime, timeRangeDuration } = getBreakOverlapTimeAndDuration(movingTask, timeRanges);
+            // if (breakOverlapTime > 0 && movingTask.category !== 'Hold'){
+            //     console.log('breakOverlapTime', breakOverlapTime / 60000);
+            //     // Create a clone of the movingTask
+            //     let movingTaskClone = {...movingTask};
 
-                // Extend the end date of the task by the full duration of the overlapping timeRange
-                movingTaskClone.to += timeRangeDuration;
+            //     // Extend the end date of the task by the full duration of the overlapping timeRange
+            //     movingTaskClone.to += timeRangeDuration;
 
-                gantt.updateTask(movingTaskClone);
-            }
+            //     gantt.updateTask(movingTaskClone);
+            // }
 
             // Check if we bumpin
             bumpAndGrind(movingTask);
 
+            //addPumps();
+
             //syncGanttData();
 
             // Save to redis
-            saveGanttData(ganttData);
+            //saveGanttData(ganttData);
             
         });
 
@@ -427,6 +543,7 @@
             <table class="sg-popup-table" style="border-collapse: collapse; width: 100%;">
                 <tr style="border-bottom: 1px solid #ddd;"><th style="text-align: left;">Task</th><td>${task.label}</td></tr>
                 <tr style="border-bottom: 1px solid #ddd;"><th style="text-align: left;">Product</th><td>${task.product}</td></tr>
+                <tr style="border-bottom: 1px solid #ddd;"><th style="text-align: left;">Lbs</th><td>${task.lbs}</td></tr>
                 <tr style="border-bottom: 1px solid #ddd;"><th style="text-align: left;">Start</th><td>${new Date(task.from).toLocaleTimeString()}</td></tr>
                 <tr style="border-bottom: 1px solid #ddd;"><th style="text-align: left;">End</th><td>${new Date(task.to).toLocaleTimeString()}</td></tr>
                 <tr style="border-bottom: 1px solid #ddd;"><th style="text-align: left;">Runtime</th><td>${task.runTime / 60000} minutes</td></tr>
@@ -455,12 +572,11 @@
         gantt.$set(options);
     };
     function onSetWeekView() {
-        console.log('weekinit')
         options.fitWidth = false;
         options.columnUnit = 'hour';
         options.columnOffset = 1;
-        options.from = currentStart.clone().startOf('week');
-        options.to = currentStart.clone().endOf('week');
+        options.from = moment().startOf('day').toDate();
+        options.to = moment().startOf('day').add(1, 'week').toDate();
         options.minWidth = 5000;
         options.headers = [
             { unit: 'month', format: 'MMMM YYYY', sticky: true },
@@ -479,16 +595,169 @@
         gantt.$set(options);
     };
 
+    function addHoldDependencies() {
+        // Get all tasks
+        const allTasks = getAllTasks();
+
+        // Filter out the hold tasks
+        const holdTasks = allTasks.filter(task => task.category === "Hold");
+
+        // Group hold tasks by resourceId
+        const tasksByResource = holdTasks.reduce((acc, task) => {
+            if (!acc[task.resourceId]) {
+                acc[task.resourceId] = [];
+            }
+            acc[task.resourceId].push(task);
+            return acc;
+        }, {});
+
+        // For each resource, sort the tasks by "from" time
+        Object.keys(tasksByResource).forEach(resourceId => {
+            tasksByResource[resourceId].sort((a, b) => a.from - b.from);
+        });
+
+        // Determine the highest dependency id, to correctly assign a unique id to new dependencies
+        let maxId = ganttData.dependencies.reduce((max, dependency) => {
+            return typeof dependency.id === "number" ? Math.max(max, dependency.id) : max;
+        }, 0);
+
+        // Iterate over each resource
+        Object.keys(tasksByResource).forEach(resourceId => {
+            let holdTasksInResource = tasksByResource[resourceId];
+
+            // Iterate over each hold task in the resource, skipping the first one
+            for(let i = 1; i < holdTasksInResource.length; i++) {
+                let precedingTask = holdTasksInResource[i-1];
+                let currentTask = holdTasksInResource[i];
+
+                // Create a new dependency
+                let newDependency = {
+                    id: ++maxId,
+                    fromId: precedingTask.id,
+                    toId: currentTask.id,
+                    stroke: '#ff0000',
+                    strokeWidth: 1,
+                    arrowSize: 10
+                };
+
+                // Check if this dependency already exists
+                let existingDependency = ganttData.dependencies.find(dep => dep.fromId === newDependency.fromId && dep.toId === newDependency.toId);
+
+                // If the dependency does not exist, add it
+                if (!existingDependency) {
+                    ganttData.dependencies.push(newDependency);
+                }
+            }
+        });
+
+        // Collect all dependencies related to Hold tasks
+        let holdDependencies = ganttData.dependencies.filter(dep => holdTasks.find(task => task.id === dep.fromId || task.id === dep.toId));
+
+        // Iterate over all hold dependencies to verify if they're still valid
+        for (let dep of holdDependencies) {
+            let fromTask = gantt.getTask(dep.fromId).model;
+            let toTask = gantt.getTask(dep.toId).model;
+
+            // Check the conditions for the dependency. If both are not met, remove the dependency
+            if (fromTask.category === 'Hold' && toTask.category === 'Hold') {
+                if (fromTask.resourceId !== toTask.resourceId || fromTask.to >= toTask.from) {
+                    let index = ganttData.dependencies.findIndex(d => d.id === dep.id);
+                    ganttData.dependencies.splice(index, 1);
+                }
+            }
+        }
+
+        // Update the Gantt chart
+        options.dependencies = ganttData.dependencies;
+        gantt.$set(options);
+    }
+
+    async function updateAllHoldingTasks() {
+        // Get all tasks using getAllTasks function
+        let allTasks = getAllTasks();
+
+        // Iterate over all tasks
+        for (let task of allTasks) {
+
+            // Check if the task category is 'Hold'
+            if (task.category === 'Hold') {
+
+                // Holding tanks are used on fill line until fill job comlete and holding tank empty
+                let nextStep = ganttData.dependencies.find(dep => dep.fromId === task.id);
+                let fillTask = gantt.getTask(nextStep.toId).model;
+                if (fillTask) {
+                    task.to = fillTask.to;
+                    gantt.updateTask(task);
+                }
+
+                // Wait for 25 milliseconds before proceeding
+                await new Promise(r => setTimeout(r, 25));
+
+                // Determine the 'from' time based on the preceding task
+                let lastSteps = ganttData.dependencies.filter(dep => dep.toId === task.id);
+                let precedingTasks = lastSteps.map(dep => gantt.getTask(dep.fromId).model);
+
+                // Give priority to Hold tasks
+                let precedingTask = precedingTasks.find(t => t.category === 'Hold') || precedingTasks[0];
+
+                // If the preceding task is a Hold task, use its 'to' time + setup/changeover time
+                if (precedingTask.category === 'Hold') {
+                    let setupTimeOrChangeoverTime = precedingTask.product === task.product ? precedingTask.setupTime : precedingTask.changeoverTime;
+                    task.from = precedingTask.to + setupTimeOrChangeoverTime;
+                }
+                // If it's not, use the mix task's 'to' time
+                else {
+                    task.from = precedingTask.to;
+                }
+
+                // Update the task
+                gantt.updateTask(task);
+            }
+        }
+
+        addPumps();
+    }
+
+
+
+
     function snapback() {
-        console.log('snapback')
+        
+        console.log(gantt.getTasks(4))
+
+        // ganttData.rows.forEach(row => {
+        //     const tasks = gantt.getTasks(row.id);
+        //     if(tasks){
+        //         tasks.forEach(task => {
+        //             let taskData = task.model;
+        //             // Find task in ganttData.tasks by id
+        //             let existingTask = ganttData.tasks.find(task => task.id === taskData.id);
+
+        //             if(existingTask){
+        //                 // Update existing properties and add new properties
+        //                 Object.keys(taskData).forEach(prop => {
+        //                     existingTask[prop] = taskData[prop];
+        //                 });
+        //             } else {
+        //                 // Insert new task in ganttData.tasks
+        //                 ganttData.tasks.push(taskData);
+        //             }
+        //         });
+        //     }
+        // });
+        console.log('ganttData post zoink', ganttData)
+    };
+
+    function getAllTasks() {
+        let tasksArray = [];
 
         ganttData.rows.forEach(row => {
             const tasks = gantt.getTasks(row.id);
             if(tasks){
                 tasks.forEach(task => {
                     let taskData = task.model;
-                    // Find task in ganttData.tasks by id
-                    let existingTask = ganttData.tasks.find(task => task.id === taskData.id);
+                    // Find task in tasksArray by id
+                    let existingTask = tasksArray.find(task => task.id === taskData.id);
 
                     if(existingTask){
                         // Update existing properties and add new properties
@@ -496,17 +765,19 @@
                             existingTask[prop] = taskData[prop];
                         });
                     } else {
-                        // Insert new task in ganttData.tasks
-                        ganttData.tasks.push(taskData);
+                        // Insert new task in tasksArray
+                        tasksArray.push(taskData);
                     }
                 });
             }
         });
-        console.log('ganttData post zoink', ganttData)
-    };
+
+        return tasksArray;
+    }
+
 
     function syncGanttData() {
-        console.log('we syncing', ganttData.tasks)
+        console.log('Syncing')
 
         ganttData.rows.forEach(row => {
             const tasks = gantt.getTasks(row.id);
