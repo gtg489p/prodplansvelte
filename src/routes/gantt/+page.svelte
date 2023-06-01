@@ -240,7 +240,7 @@
             bumpAndGrind(bumpedTask);
         }
 
-        addsetups();
+        //addsetups();
         
     }
 
@@ -284,13 +284,24 @@
             if (rowTasks === null) {
                 rowTasks = [];
             }
+
+            // Sort tasks by their start times
+            rowTasks.sort((a, b) => a.model.from - b.model.from);
+
             // Compare each task with all other tasks in the row
-            for (let i = 0; i < rowTasks.length; i++) {
-                for (let j = 0; j < rowTasks.length; j++) {
-                    if (i == j) continue; // Skip when the tasks are the same
+            for (let i = 0; i < rowTasks.length - 1; i++) {
+                for (let j = i + 1; j < rowTasks.length; j++) {
 
                     let taskA = rowTasks[i];
                     let taskB = rowTasks[j];
+
+                    // If either task is of "Pump" or "Idle Pump" category, skip the current iteration
+                    if (taskA.model.category === "Pump" || 
+                        taskB.model.category === "Pump" || 
+                        taskA.model.category === "Idle Pump" || 
+                        taskB.model.category === "Idle Pump") {
+                        continue;
+                    }
 
                     // Calculate setup/changeover time
                     let setupTimeOrChangeoverTime = taskA.model.product === taskB.model.product ? taskA.model.setupTime : taskA.model.changeoverTime;
@@ -323,9 +334,11 @@
         }
     }
 
+
+
     function addPumps() {
         // Remove current pump tasks
-        ganttData.tasks = ganttData.tasks.filter(task => task.category !== "Pump");
+        ganttData.tasks = ganttData.tasks.filter(task => task.category !== "Pump" && task.category !== "Idle Pump");
 
         // Create a hash map for tasks
         let taskMap = {};
@@ -397,16 +410,50 @@
 
                 // Add the pump task to ganttData.tasks
                 ganttData.tasks.push(pumpTask);
+                gantt.updateTask(pumpTask);
             });
+
+            // Get all pump tasks for the current mixTask
+            let pumpTasks = ganttData.tasks.filter(task => task.category === "Pump" && task.mixId === mixTask.id);
+
+            // Sort pump tasks by the "from" time
+            pumpTasks.sort((a, b) => a.from - b.from);
+
+            // Check for gaps between pump tasks
+            for (let i = 0; i < pumpTasks.length - 1; i++) {
+                let gap = pumpTasks[i + 1].from - pumpTasks[i].to;
+                if (gap > 0) {
+                    // Compute the idle time
+                    let idleTime = pumpTasks[i + 1].from - pumpTasks[i].to;
+
+                    // Create a new idle pump task
+                    let pumpIdleTask = {
+                        id: "pumpIdle_" + mixTask.id + '_' + i,
+                        from: pumpTasks[i].to,
+                        to: pumpTasks[i].to + idleTime,
+                        resourceId: mixTask.resourceId,
+                        mixId: mixTask.id,
+                        label: "Waiting to Pump",
+                        product: mixTask.product,
+                        runTime: idleTime,
+                        setupTime: 0,
+                        changeoverTime: 0,
+                        classes: "setup-task",
+                        enableDragging: false,
+                        category: "Idle Pump"
+                    };
+
+                    // Add the idle pump task to ganttData.tasks
+                    ganttData.tasks.push(pumpIdleTask);
+                    gantt.updateTask(pumpIdleTask);
+                }
+            }
         });
 
         // Update the Gantt chart
         options.tasks = ganttData.tasks;
         gantt.$set(options);
     }
-
-
-
 
 
 
@@ -520,10 +567,12 @@
             //     gantt.updateTask(movingTaskClone);
             // }
 
+            //addPumps();
+
             // Check if we bumpin
             bumpAndGrind(movingTask);
 
-            //addPumps();
+            addsetups();
 
             //syncGanttData();
 
