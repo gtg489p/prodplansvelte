@@ -214,9 +214,89 @@
         return bumpedTasks; // Return the array of bumped tasks
     }
 
+    function checkDependencyOverlap(movingTask) {
+        // Fetch the tasks related by dependencies
+        let fetchRelatedTasks = (taskId, direction) => {
+            let relatedTasks = [];
+            let searchTaskIds = [taskId];
+
+            while (searchTaskIds.length > 0) {
+                let currentTaskId = searchTaskIds.pop();
+                let relatedDependencies = ganttData.dependencies.filter(dep => dep[direction] === currentTaskId);
+
+                for (let dep of relatedDependencies) {
+                    let relatedTaskId = dep[direction === 'fromId' ? 'toId' : 'fromId'];
+                    let relatedTask = ganttData.tasks.find(task => task.id === relatedTaskId);
+
+                    if (relatedTask.category !== 'Hold') {
+                        relatedTasks.push(relatedTask);
+                    } else {
+                        searchTaskIds.push(relatedTaskId);
+                    }
+                }
+            }
+
+            return relatedTasks;
+        }
+
+        // Determine if the moving task is 'mix' or 'fill'
+        // If moving task is 'mix', we're looking for 'fill' tasks, so we need to look forward
+        // If moving task is 'fill', we're looking for 'mix' tasks, so we need to look backward
+        let direction = movingTask.category === 'Mix' ? 'fromId' : 'toId';
+        
+        // Fetch related tasks based on the dependencies
+        let relatedTasks = fetchRelatedTasks(movingTask.id, direction);
+        
+        let bumpedTasks = [];
+
+        for (let relatedTask of relatedTasks) {
+            let rangeStart = relatedTask.from - (relatedTask.product === movingTask.product ? relatedTask.setupTime : relatedTask.changeoverTime);
+            let rangeEnd = relatedTask.to + (relatedTask.product === movingTask.product ? movingTask.setupTime : movingTask.changeoverTime);
+
+            let isOverlap = false;
+            if (movingTask.category === 'Mix' && movingTask.from >= relatedTask.from) {
+                isOverlap = true;  // For Mix task, anything greater than the relatedTask.from is overlap
+            } else if (movingTask.category === 'Fill' && movingTask.to <= relatedTask.to) {
+                isOverlap = true;  // For Fill task, anything less than the relatedTask.to is overlap
+            } else {
+                // Overlap detection for when moving task is in between the range of related task
+                isOverlap = (movingTask.from < rangeEnd && movingTask.from >= rangeStart) ||
+                            (movingTask.to <= rangeEnd && movingTask.to > rangeStart) ||
+                            (movingTask.from <= rangeStart && movingTask.to >= rangeEnd);
+            }
+
+            if (isOverlap) {
+                let overlapPct;
+                if (movingTask.category === 'Mix') {
+                    overlapPct = 0.01; // Forces the Mix task to be before the Fill task
+                } else { // If moving task is Fill
+                    overlapPct = 0.99; // Forces the Fill task to be after the Mix task
+                }
+
+                console.log(`Task ${movingTask.id} overlapped with Task ${relatedTask.id} at ${overlapPct * 100}%`);
+
+                bumpedTasks.push({
+                    bumpedTask: relatedTask,
+                    overlapPct: overlapPct
+                });
+            }
+        }
+
+
+        return bumpedTasks;
+    }
+
+
+
+
+
+
+
     function bumpAndGrind(movingTask) {
         console.log('bumpin')
-        let bumpedTasks = checkTaskOverlap(movingTask);
+
+        let bumpedTasks = [...checkTaskOverlap(movingTask), ...checkDependencyOverlap(movingTask)];
+
         // Iterate through each bumpedTask
         for (let { bumpedTask, overlapPct } of bumpedTasks) {
             // Update the bumpedTask
@@ -239,10 +319,8 @@
             // Recursively call bumpAndGrind with the bumpedTask
             bumpAndGrind(bumpedTask);
         }
-
-        //addsetups();
-        
     }
+
 
     function deleteAndCloneTask(originalTask) {
         // Create a clone of originalTask
@@ -273,7 +351,6 @@
     async function addsetups() {
         // Remove tasks that start with "setup_"
         ganttData.tasks = ganttData.tasks.filter(task => task.category !== "Setup");
-        console.log('add/kill setups', ganttData.tasks)
         // Update the Gantt chart
         options.tasks = ganttData.tasks;
         gantt.$set(options);
@@ -354,6 +431,10 @@
         // Filter out the mix tasks
         const mixTasks = getAllTasks().filter(task => task.category === "Mix");
 
+        // Calculate maxId before your loop:
+        let maxId = Math.max(...ganttData.tasks.filter(task => !isNaN(task.id)).map(task => Number(task.id)));
+
+
         // For each mix task, compute and add a pump task
         mixTasks.forEach(mixTask => {
             // Get dependencies of the current mix task
@@ -385,7 +466,7 @@
 
                 // Get the maximum "to" time of the existing pump tasks
                 let maxPumpTo = Math.max(...existingPumpTasks.map(task => task.to), mixTask.to);
-
+                
                 // Start of the pump task is the maximum of the hold task "from" time and the max "to" time of the existing pump tasks
                 let pumpFrom = Math.max(holdTask.from, maxPumpTo);
                 // End of the pump task is the start time + the pump duration
@@ -393,19 +474,20 @@
 
                 // Create a new pump task
                 let pumpTask = {
-                    id: "pump_" + mixTask.id + '_to_' + holdTask.id,
+                    id: ++maxId, // Assign new id
                     from: pumpFrom,
                     to: pumpTo,
                     resourceId: mixTask.resourceId,
                     mixId: mixTask.id,
-                    label: "Pump to: " + gantt.getRow(holdTask.resourceId).model.name,
+                    label: "Pump",// + gantt.getRow(holdTask.resourceId).model.name,
                     product: mixTask.product,
                     runTime: pumpDuration,
                     setupTime: 0,
                     changeoverTime: 0,
                     classes: "setup-task",
                     enableDragging: false,
-                    category: "Pump"
+                    category: "Pump",
+                    lbs: holdTask.lbs
                 };
 
                 // Add the pump task to ganttData.tasks
@@ -428,12 +510,12 @@
 
                     // Create a new idle pump task
                     let pumpIdleTask = {
-                        id: "pumpIdle_" + mixTask.id + '_' + i,
+                        id: ++maxId,
                         from: pumpTasks[i].to,
                         to: pumpTasks[i].to + idleTime,
                         resourceId: mixTask.resourceId,
                         mixId: mixTask.id,
-                        label: "Waiting to Pump",
+                        label: "Waiting",
                         product: mixTask.product,
                         runTime: idleTime,
                         setupTime: 0,
