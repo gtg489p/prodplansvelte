@@ -197,11 +197,13 @@
             let rangeStart = otherTask.model.from - (otherTask.model.product === movingTask.product ? otherTask.model.setupTime : otherTask.model.changeoverTime);
             let rangeEnd = otherTask.model.to + (otherTask.model.product === movingTask.product ? movingTask.setupTime : movingTask.changeoverTime);
 
+            let movingTaskMiddle = movingTask.from + (movingTask.to - movingTask.from) / 2;
+
             if ((movingTask.from < rangeEnd && movingTask.from >= rangeStart) ||
                 (movingTask.to <= rangeEnd && movingTask.to > rangeStart) ||
                 (movingTask.from <= rangeStart && movingTask.to >= rangeEnd)) {
 
-                let overlapPct = (movingTask.from - otherTask.model.from) / (otherTask.model.to - otherTask.model.from);
+                let overlapPct = (movingTaskMiddle - otherTask.model.from) / (otherTask.model.to - otherTask.model.from);
                 console.log(`Task ${movingTask.id} overlapped with Task ${otherTask.model.id} on resource ${movingTask.resourceId} at ${overlapPct * 100}%`);
 
                 bumpedTasks.push({ // Push bumped task and overlap percentage into the array
@@ -213,6 +215,7 @@
 
         return bumpedTasks; // Return the array of bumped tasks
     }
+
 
     function checkDependencyOverlap(movingTask) {
         // Fetch the tasks related by dependencies
@@ -304,11 +307,9 @@
             let setupTimeOrChangeoverTime = bumpedTask.product === movingTask.product ? bumpedTask.setupTime : bumpedTask.changeoverTime;
 
             if (overlapPct < 0.5) {
-                // If overlapPct < 50%
                 bumpedTask.from = movingTask.to + setupTimeOrChangeoverTime;
                 bumpedTask.to = bumpedTask.from + bumpedRuntime;
             } else {
-                // If overlapPct >= 50%
                 bumpedTask.to = movingTask.from - setupTimeOrChangeoverTime;
                 bumpedTask.from = bumpedTask.to - bumpedRuntime;
             }
@@ -644,17 +645,12 @@
             //     gantt.updateTask(movingTaskClone);
             // }
 
-            //addPumps();
-
             // Check if we bumpin
             bumpAndGrind(movingTask);
 
+            updateAllHoldingTasks();
+
             addsetups();
-
-            //syncGanttData();
-
-            // Save to redis
-            //saveGanttData(ganttData);
             
         });
 
