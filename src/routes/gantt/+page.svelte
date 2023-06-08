@@ -411,10 +411,8 @@
         }
     }
 
-
-
     function addPumps() {
-        // Remove current pump tasks
+        // Remove current pump and idle pump tasks
         ganttData.tasks = ganttData.tasks.filter(task => task.category !== "Pump" && task.category !== "Idle Pump");
 
         // Create a hash map for tasks
@@ -433,7 +431,6 @@
 
         // Calculate maxId before your loop:
         let maxId = Math.max(...ganttData.tasks.filter(task => !isNaN(task.id)).map(task => Number(task.id)));
-
 
         // For each mix task, compute and add a pump task
         mixTasks.forEach(mixTask => {
@@ -466,7 +463,7 @@
 
                 // Get the maximum "to" time of the existing pump tasks
                 let maxPumpTo = Math.max(...existingPumpTasks.map(task => task.to), mixTask.to);
-                
+
                 // Start of the pump task is the maximum of the hold task "from" time and the max "to" time of the existing pump tasks
                 let pumpFrom = Math.max(holdTask.from, maxPumpTo);
                 // End of the pump task is the start time + the pump duration
@@ -479,7 +476,7 @@
                     to: pumpTo,
                     resourceId: mixTask.resourceId,
                     mixId: mixTask.id,
-                    label: "Pump",// + gantt.getRow(holdTask.resourceId).model.name,
+                    label: "Pump",
                     product: mixTask.product,
                     runTime: pumpDuration,
                     setupTime: 0,
@@ -492,50 +489,48 @@
 
                 // Add the pump task to ganttData.tasks
                 ganttData.tasks.push(pumpTask);
+
+                // Immediately after pump task creation, calculate and add idle tasks if needed
+                let pumpTasksForMix = ganttData.tasks.filter(task => task.category === "Pump" && task.mixId === mixTask.id);
+                pumpTasksForMix.sort((a, b) => a.from - b.from);
+
+                for (let i = 0; i < pumpTasksForMix.length - 1; i++) {
+                    let gap = pumpTasksForMix[i + 1].from - pumpTasksForMix[i].to;
+                    if (gap > 0) {
+                        let idleTime = pumpTasksForMix[i + 1].from - pumpTasksForMix[i].to;
+
+                        let pumpIdleTask = {
+                            id: ++maxId,
+                            from: pumpTasksForMix[i].to,
+                            to: pumpTasksForMix[i].to + idleTime,
+                            resourceId: mixTask.resourceId,
+                            mixId: mixTask.id,
+                            label: "Waiting",
+                            product: mixTask.product,
+                            runTime: idleTime,
+                            setupTime: 0,
+                            changeoverTime: 0,
+                            classes: "setup-task",
+                            enableDragging: false,
+                            category: "Idle Pump"
+                        };
+
+                        ganttData.tasks.push(pumpIdleTask);
+                    }
+                }
+
+                // Update each pump task
                 gantt.updateTask(pumpTask);
             });
-
-            // Get all pump tasks for the current mixTask
-            let pumpTasks = ganttData.tasks.filter(task => task.category === "Pump" && task.mixId === mixTask.id);
-
-            // Sort pump tasks by the "from" time
-            pumpTasks.sort((a, b) => a.from - b.from);
-
-            // Check for gaps between pump tasks
-            for (let i = 0; i < pumpTasks.length - 1; i++) {
-                let gap = pumpTasks[i + 1].from - pumpTasks[i].to;
-                if (gap > 0) {
-                    // Compute the idle time
-                    let idleTime = pumpTasks[i + 1].from - pumpTasks[i].to;
-
-                    // Create a new idle pump task
-                    let pumpIdleTask = {
-                        id: ++maxId,
-                        from: pumpTasks[i].to,
-                        to: pumpTasks[i].to + idleTime,
-                        resourceId: mixTask.resourceId,
-                        mixId: mixTask.id,
-                        label: "Waiting",
-                        product: mixTask.product,
-                        runTime: idleTime,
-                        setupTime: 0,
-                        changeoverTime: 0,
-                        classes: "setup-task",
-                        enableDragging: false,
-                        category: "Idle Pump"
-                    };
-
-                    // Add the idle pump task to ganttData.tasks
-                    ganttData.tasks.push(pumpIdleTask);
-                    gantt.updateTask(pumpIdleTask);
-                }
-            }
         });
 
         // Update the Gantt chart
         options.tasks = ganttData.tasks;
         gantt.$set(options);
     }
+
+
+
 
 
 
@@ -848,8 +843,6 @@
 
         addPumps();
     }
-
-
 
 
     function snapback() {
