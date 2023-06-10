@@ -217,8 +217,9 @@
     }
 
 
-    function checkDependencyOverlap(movingTask) {
-        // Fetch the tasks related by dependencies
+    function checkDependencyOverlap(movingTask, origMovingTask) {
+        console.log('checking dependency overlap', movingTask);
+        
         let fetchRelatedTasks = (taskId, direction) => {
             let relatedTasks = [];
             let searchTaskIds = [taskId];
@@ -242,17 +243,13 @@
             return relatedTasks;
         }
 
-        // Determine if the moving task is 'mix' or 'fill'
-        // If moving task is 'mix', we're looking for 'fill' tasks, so we need to look forward
-        // If moving task is 'fill', we're looking for 'mix' tasks, so we need to look backward
-        let direction = movingTask.category === 'Mix' ? 'fromId' : 'toId';
-        
-        // Fetch related tasks based on the dependencies
+        let direction = origMovingTask.category === 'Mix' ? 'fromId' : 'toId';
         let relatedTasks = fetchRelatedTasks(movingTask.id, direction);
         
         let bumpedTasks = [];
 
         for (let relatedTask of relatedTasks) {
+            console.log('   dependent task:', relatedTask);
             let rangeStart = relatedTask.from - (relatedTask.product === movingTask.product ? relatedTask.setupTime : relatedTask.changeoverTime);
             let rangeEnd = relatedTask.to + (relatedTask.product === movingTask.product ? movingTask.setupTime : movingTask.changeoverTime);
 
@@ -270,10 +267,10 @@
 
             if (isOverlap) {
                 let overlapPct;
-                if (movingTask.category === 'Mix') {
-                    overlapPct = 0.01; // Forces the Mix task to be before the Fill task
-                } else { // If moving task is Fill
-                    overlapPct = 0.99; // Forces the Fill task to be after the Mix task
+                if (origMovingTask.category === 'Mix') {
+                    overlapPct = 0.01;
+                } else {
+                    overlapPct = 0.99;
                 }
 
                 console.log(`Task ${movingTask.id} overlapped with Task ${relatedTask.id} at ${overlapPct * 100}%`);
@@ -285,21 +282,15 @@
             }
         }
 
-
         return bumpedTasks;
     }
 
 
-
-
-
-
-
-    function bumpAndGrind(movingTask) {
+    function bumpAndGrind(movingTask, origMovingTask) {
         console.log('bumpin')
 
-        let bumpedTasks = [...checkTaskOverlap(movingTask), ...checkDependencyOverlap(movingTask)];
-
+        let bumpedTasks = [...checkTaskOverlap(movingTask), ...checkDependencyOverlap(movingTask, origMovingTask)];
+        console.log('bumpedTasks',bumpedTasks)
         // Iterate through each bumpedTask
         for (let { bumpedTask, overlapPct } of bumpedTasks) {
             // Update the bumpedTask
@@ -318,7 +309,7 @@
             gantt.updateTask(bumpedTask);
 
             // Recursively call bumpAndGrind with the bumpedTask
-            bumpAndGrind(bumpedTask);
+            bumpAndGrind(bumpedTask, origMovingTask);
         }
     }
 
@@ -477,6 +468,7 @@
                     to: pumpTo,
                     resourceId: mixTask.resourceId,
                     mixId: mixTask.id,
+                    holdId: holdTask.id,
                     label: "Pump",
                     product: mixTask.product,
                     runTime: pumpDuration,
@@ -617,9 +609,7 @@
             let movingTask = event[0].task.model;
             console.log('movingTask', movingTask);
 
-            addHoldDependencies();
-
-            updateAllHoldingTasks();
+            //addHoldDependencies();
 
             // check if task is resized
             if ((movingTask.to - movingTask.from) !== (originalTaskState.to - originalTaskState.from)) {
@@ -646,9 +636,13 @@
             // }
 
             // Check if we bumpin
-            bumpAndGrind(movingTask);
+            bumpAndGrind(movingTask, movingTask);
+
+            addHoldDependencies();
 
             updateAllHoldingTasks();
+
+            addPumpDependencies();
 
             addsetups();
             
@@ -669,6 +663,7 @@
                 <tr style="border-bottom: 1px solid #ddd;"><th style="text-align: left;">Start</th><td>${new Date(task.from).toLocaleTimeString()}</td></tr>
                 <tr style="border-bottom: 1px solid #ddd;"><th style="text-align: left;">End</th><td>${new Date(task.to).toLocaleTimeString()}</td></tr>
                 <tr style="border-bottom: 1px solid #ddd;"><th style="text-align: left;">Runtime</th><td>${task.runTime / 60000} minutes</td></tr>
+                <tr style="border-bottom: 1px solid #ddd;"><th style="text-align: left;">id</th><td>${task.id}</td></tr>
             </table>
         `;
         div.style.position = 'absolute';
@@ -717,11 +712,61 @@
         gantt.$set(options);
     };
 
+    function addPumpDependencies() {
+        // Get all tasks
+        const allTasks = getAllTasks();
+
+        // Filter just for pump tasks
+        const pumpTasks = allTasks.filter(task => task.category === "Pump");
+
+        // Determine the highest dependency id, to correctly assign a unique id to new dependencies
+        let maxId = ganttData.dependencies.reduce((max, dependency) => {
+            return typeof dependency.id === "number" ? Math.max(max, dependency.id) : max;
+        }, 0);
+
+        // Iterate over each pump task
+        for(let i = 0; i < pumpTasks.length; i++) {
+            let currentTask = pumpTasks[i];
+
+            // Remove any existing dependencies where fromId is the mixId of current pump task
+            //ganttData.dependencies = ganttData.dependencies.filter(dep => dep.fromId !== currentTask.mixId);
+
+            // Create a new dependency from the mix task to the pump task
+            let newDependency1 = {
+                id: ++maxId,
+                fromId: currentTask.mixId,
+                toId: currentTask.id,
+                stroke: '#ff0000',
+                arrowSize: 10
+            };
+
+            // Create a new dependency from the pump task to the holding task
+            let newDependency2 = {
+                id: ++maxId,
+                fromId: currentTask.id,
+                toId: currentTask.holdId,
+                stroke: '#ff0000',
+                arrowSize: 10
+            };
+
+            // Add the new dependencies
+            ganttData.dependencies.push(newDependency1, newDependency2);
+
+            // Remove any dependencies that link directly from the mix task to the hold task
+            //ganttData.dependencies = ganttData.dependencies.filter(dep => !(dep.fromId === currentTask.mixId && dep.toId === currentTask.holdId));
+        }
+
+        // Update the Gantt chart
+        options.dependencies = ganttData.dependencies;
+        gantt.$set(options);
+    }
+
+
     function addHoldDependencies() {
         // Get all tasks
         const allTasks = getAllTasks();
 
-        // Filter out the hold tasks
+        // Filter just for hold tasks
         const holdTasks = allTasks.filter(task => task.category === "Hold");
 
         // Group hold tasks by resourceId
