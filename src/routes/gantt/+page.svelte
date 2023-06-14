@@ -183,6 +183,115 @@
         });
     }
 
+    async function stayInYourLane(movingTask) {
+        let originalResourceId = originalTaskState.resourceId;
+        let movingResourceId = movingTask.resourceId;
+
+        // Check if the resourceId has changed
+        if (originalResourceId !== movingResourceId) {
+            let originalResource = ganttData.rows.find(row => row.id === originalResourceId);
+            let movingResource = ganttData.rows.find(row => row.id === movingResourceId);
+
+            // Check if the category of the resource has changed
+            if (originalResource.category !== movingResource.category) {
+                console.log(`Task ${movingTask.id} moved to an invalid resource. Reverting...`);
+
+                // Use the originalTaskState to revert the movingTask
+                // movingTask.resourceId = originalResourceId;
+                // movingTask.from = originalTaskState.from;
+                movingTask.from = originalTaskState.from
+                gantt.updateTask(movingTask);
+
+                // Wait for 25 milliseconds before proceeding
+                await new Promise(r => setTimeout(r, 25));
+
+                // Use the updateTask method from Svelte Gantt to redraw the task in its original place
+                console.log('originalTaskState',originalTaskState, originalTaskState.from, movingTask.from)
+                movingTask.to = originalTaskState.to
+                movingTask.resourceId = originalTaskState.resourceId
+                gantt.updateTask(movingTask);
+            }
+        }
+    }
+
+    async function mixLaneChange(movingTask) {
+        let originalResourceId = originalTaskState.resourceId;
+        let movingResourceId = movingTask.resourceId;
+
+        // Check if the task category is 'Mix' and if the resourceId has changed
+        if (movingTask.category === 'Mix' && originalResourceId !== movingResourceId) {
+            let originalResource = ganttData.rows.find(row => row.id === originalResourceId);
+            let movingResource = ganttData.rows.find(row => row.id === movingResourceId);
+
+            // Check if the category of the resource has changed
+            if (originalResource.category !== movingResource.category) {
+                console.log(`Task ${movingTask.id} moved to an invalid resource. Reverting...`);
+
+                // Use the originalTaskState to revert the movingTask
+                movingTask.from = originalTaskState.from
+                gantt.updateTask(movingTask);
+
+                // Wait for 25 milliseconds before proceeding
+                await new Promise(r => setTimeout(r, 25));
+
+                // Use the updateTask method from Svelte Gantt to redraw the task in its original place
+                movingTask.to = originalTaskState.to
+                movingTask.resourceId = originalTaskState.resourceId
+                gantt.updateTask(movingTask);
+            } else {
+                // Find the associated 'Pump' tasks
+                let pumpTasks = [];
+                let searchQueue = [movingTask.id];
+
+                while (searchQueue.length > 0) {
+                    let currentId = searchQueue.shift();
+                    let deps = ganttData.dependencies.filter(dep => dep.fromId === currentId);
+
+                    for (let dep of deps) {
+                        let task = gantt.getTask(dep.toId).model;
+
+                        if (task.category === 'Pump') {
+                            pumpTasks.push(task);
+                        }
+
+                        searchQueue.push(task.id);
+                    }
+                }
+
+                // Update the 'Pump' tasks
+                for (let pumpTask of pumpTasks) {
+                    pumpTask.to = movingTask.to;
+                    pumpTask.from = pumpTask.to - pumpTask.runTime;
+                    pumpTask.resourceId = movingTask.resourceId;
+                    gantt.updateTask(pumpTask);
+                }
+            }
+        } else if (movingTask.category === 'Pump' && originalResourceId !== movingResourceId) {
+            // Get parent 'Mix' task
+            let parentDep = ganttData.dependencies.find(dep => dep.toId === movingTask.id);
+            let parentMixTask = gantt.getTask(parentDep.fromId).model;
+
+            // Check if the Pump task has been moved to a different resourceId than its parent Mix task
+            if (parentMixTask.resourceId !== movingResourceId) {
+                console.log(`Pump Task ${movingTask.id} moved to an invalid resource. Reverting...`);
+
+                // Use the originalTaskState to revert the movingTask
+                movingTask.from = originalTaskState.from;
+                gantt.updateTask(movingTask);
+
+                // Wait for 25 milliseconds before proceeding
+                await new Promise(r => setTimeout(r, 25));
+
+                // Use the updateTask method from Svelte Gantt to redraw the task in its original place
+                movingTask.to = originalTaskState.to;
+                movingTask.resourceId = originalTaskState.resourceId;
+                gantt.updateTask(movingTask);
+            }
+        }
+    }
+
+
+
     function checkTaskOverlap(movingTask) {
         let otherTasks = gantt.getTasks(movingTask.resourceId);
         if (!otherTasks) {
@@ -193,6 +302,9 @@
 
         for (let otherTask of otherTasks) {
             if (otherTask.model.id === movingTask.id || otherTask.model.category === "Setup") continue;
+
+            // Check if the other task is a Pump task and its mixId matches the id of the moving task
+            if (otherTask.model.category === "Pump" && otherTask.model.mixId === movingTask.id) continue;
 
             let rangeStart = otherTask.model.from - (otherTask.model.product === movingTask.product ? otherTask.model.setupTime : otherTask.model.changeoverTime);
             let rangeEnd = otherTask.model.to + (otherTask.model.product === movingTask.product ? movingTask.setupTime : movingTask.changeoverTime);
@@ -219,7 +331,13 @@
 
     function checkDependencyOverlap(movingTask, origMovingTask) {
         console.log('checking dependency overlap', movingTask);
-        
+
+        // If the moving task is a 'Hold' task, do not proceed
+        if (movingTask.category === 'Hold') {
+            console.log(`Task ${movingTask.id} is a 'Hold' task and will not trigger any bumps.`);
+            return [];
+        }
+            
         let fetchRelatedTasks = (taskId, direction) => {
             let relatedTasks = [];
             let searchTaskIds = [taskId];
@@ -243,22 +361,25 @@
             return relatedTasks;
         }
 
-        let direction = origMovingTask.category === 'Mix' ? 'fromId' : 'toId';
+        let direction = (origMovingTask.category === 'Mix' || origMovingTask.category === 'Pump') ? 'fromId' : 'toId';
         let relatedTasks = fetchRelatedTasks(movingTask.id, direction);
-        
         let bumpedTasks = [];
-
+        console.log('relatedTasks',relatedTasks)
         for (let relatedTask of relatedTasks) {
-            console.log('   dependent task:', relatedTask);
+
             let rangeStart = relatedTask.from - (relatedTask.product === movingTask.product ? relatedTask.setupTime : relatedTask.changeoverTime);
             let rangeEnd = relatedTask.to + (relatedTask.product === movingTask.product ? movingTask.setupTime : movingTask.changeoverTime);
 
             let isOverlap = false;
-            if (movingTask.category === 'Mix' && movingTask.from >= relatedTask.from) {
-                isOverlap = true;  // For Mix task, anything greater than the relatedTask.from is overlap
-            } else if (movingTask.category === 'Fill' && movingTask.to <= relatedTask.to) {
-                isOverlap = true;  // For Fill task, anything less than the relatedTask.to is overlap
-            } else {
+            if ((movingTask.category === 'Mix' || movingTask.category === 'Pump') && movingTask.from >= relatedTask.from && relatedTask.category != 'Mix' ) {
+                isOverlap = true; // For Mix task, anything greater than or equal to relatedTask.from is overlap
+            }
+
+            if (movingTask.category === 'Fill' && movingTask.to <= relatedTask.to) {
+                isOverlap = true; // For Fill task, anything less than or equal to relatedTask.to is overlap
+            }
+
+            if (!isOverlap) {
                 // Overlap detection for when moving task is in between the range of related task
                 isOverlap = (movingTask.from < rangeEnd && movingTask.from >= rangeStart) ||
                             (movingTask.to <= rangeEnd && movingTask.to > rangeStart) ||
@@ -267,13 +388,13 @@
 
             if (isOverlap) {
                 let overlapPct;
-                if (origMovingTask.category === 'Mix') {
+                if (origMovingTask.category === 'Mix'||origMovingTask.category === 'Pump') {
                     overlapPct = 0.01;
                 } else {
                     overlapPct = 0.99;
                 }
 
-                console.log(`Task ${movingTask.id} overlapped with Task ${relatedTask.id} at ${overlapPct * 100}%`);
+                console.log(`Dependency overlap: Task ${movingTask.id} overlapped with Task ${relatedTask.id} at ${overlapPct * 100}%`);
 
                 bumpedTasks.push({
                     bumpedTask: relatedTask,
@@ -287,8 +408,6 @@
 
 
     function bumpAndGrind(movingTask, origMovingTask) {
-        console.log('bumpin')
-
         let bumpedTasks = [...checkTaskOverlap(movingTask), ...checkDependencyOverlap(movingTask, origMovingTask)];
         console.log('bumpedTasks',bumpedTasks)
         // Iterate through each bumpedTask
@@ -313,6 +432,71 @@
         }
     }
 
+    function findMixAndFillIds(task) {
+        let result = { myMixId: null, myFillId: null };
+
+        let visitedTasks = new Set();
+
+        let dfsUpstream = (currentTask) => {
+            // Mark the current task as visited
+            visitedTasks.add(currentTask.id);
+
+            // Check if this task is a Mix task
+            if (currentTask.category === 'Mix') {
+                result.myMixId = currentTask.id;
+                return;
+            }
+
+            // Get the upstream dependencies
+            let relatedDependencies = ganttData.dependencies.filter(dep => dep.toId === currentTask.id);
+
+            for (let dep of relatedDependencies) {
+                let relatedTaskId = dep.fromId;
+
+                // Skip if the task has already been visited
+                if (visitedTasks.has(relatedTaskId)) continue;
+
+                let relatedTask = ganttData.tasks.find(task => task.id === relatedTaskId);
+
+                // Recursively call dfsUpstream on the related task
+                dfsUpstream(relatedTask);
+            }
+        };
+
+        let dfsDownstream = (currentTask) => {
+            // Mark the current task as visited
+            visitedTasks.add(currentTask.id);
+
+            // Check if this task is a Fill task
+            if (currentTask.category === 'Fill') {
+                result.myFillId = currentTask.id;
+                return;
+            }
+
+            // Get the downstream dependencies
+            let relatedDependencies = ganttData.dependencies.filter(dep => dep.fromId === currentTask.id);
+
+            for (let dep of relatedDependencies) {
+                let relatedTaskId = dep.toId;
+
+                // Skip if the task has already been visited
+                if (visitedTasks.has(relatedTaskId)) continue;
+
+                let relatedTask = ganttData.tasks.find(task => task.id === relatedTaskId);
+
+                // Recursively call dfsDownstream on the related task
+                dfsDownstream(relatedTask);
+            }
+        };
+
+        // Start the DFS at the given task, going upstream for the Mix task and downstream for the Fill task
+        dfsUpstream(task);
+        dfsDownstream(task);
+
+        return result;
+    }
+
+
 
     function deleteAndCloneTask(originalTask) {
         // Create a clone of originalTask
@@ -324,7 +508,6 @@
         let maxId = Math.max(...allTasks.filter(task => !isNaN(task.id)).map(task => Number(task.id)));
 
         // Assign a new id to cloneTask by incrementing the maximum id by 1
-        console.log('maxId', maxId)
         cloneTask.id = maxId + 1;
 
         // Remove originalTask from ganttData.tasks
@@ -480,6 +663,7 @@
                     lbs: holdTask.lbs
                 };
 
+                console.log('adding pump task:', pumpTask)
                 // Add the pump task to ganttData.tasks
                 ganttData.tasks.push(pumpTask);
 
@@ -521,10 +705,6 @@
         options.tasks = ganttData.tasks;
         gantt.$set(options);
     }
-
-
-
-
 
 
     function doesTaskStartInBreak(movingTask, timeRanges) {
@@ -605,21 +785,38 @@
         });
 
  
-        gantt.api.tasks.on.changed ( (event) => {
+        gantt.api.tasks.on.changed (async (event) => {
             let movingTask = event[0].task.model;
-            console.log('movingTask', movingTask);
+            console.log('movingTask', movingTask, findMixAndFillIds(movingTask));
+            
+            //stayInYourLane(movingTask);
 
-            //addHoldDependencies();
+            mixLaneChange(movingTask);
 
             // check if task is resized
             if ((movingTask.to - movingTask.from) !== (originalTaskState.to - originalTaskState.from)) {
-                console.log('The task has been resized');
-                            
-                // calculate new runTime and update the task object
-                movingTask.runTime = movingTask.to - movingTask.from;
+                console.log('Attempt to resize');
+                if(movingTask.category === 'Pump'){
+                    console.log('Cant resize a pump task');
+                    movingTask.from = originalTaskState.from + 1;
+                    movingTask.to = originalTaskState.to -1;
+                    gantt.updateTask(movingTask);
+                    await new Promise(r => setTimeout(r, 25));
+                    movingTask.from = originalTaskState.from
+                    movingTask.to = originalTaskState.to
+                    gantt.updateTask(movingTask);
+                }
+                else{
 
-                console.log('New runTime: ', movingTask.runTime);
-                gantt.updateTask(movingTask);
+                            
+                    // calculate new runTime and update the task object
+                    movingTask.runTime = movingTask.to - movingTask.from;
+
+                    console.log('New runTime: ', movingTask.runTime);
+                    gantt.updateTask(movingTask);
+                }
+
+                
             }
 
             // // check if task overlaps a break
@@ -642,7 +839,7 @@
 
             updateAllHoldingTasks();
 
-            addPumpDependencies();
+            //updateAllPumps();
 
             addsetups();
             
@@ -871,19 +1068,110 @@
                 if (precedingTask.category === 'Hold') {
                     let setupTimeOrChangeoverTime = precedingTask.product === task.product ? precedingTask.setupTime : precedingTask.changeoverTime;
                     task.from = precedingTask.to + setupTimeOrChangeoverTime;
+
+                    // Find the associated 'Pump' task
+                    let pumpDependency = ganttData.dependencies.find(dep => dep.toId === task.id && gantt.getTask(dep.fromId).model.category === 'Pump');
+                    if (pumpDependency) {
+                        let pumpTask = gantt.getTask(pumpDependency.fromId).model;
+
+                        // Check if the 'Pump' task's 'from' is less than the 'Hold' task's 'from'
+                        if (pumpTask.from < task.from) {
+                            // Update the 'Pump' task's 'from' to match the 'Hold' task's 'from'
+                            pumpTask.from = task.from;
+                            pumpTask.to = pumpTask.from + pumpTask.runTime;
+                            gantt.updateTask(pumpTask);
+                            bumpAndGrind(pumpTask,pumpTask);
+                        }
+                    }
                 }
-                // If it's not, use the mix task's 'to' time
+                // If it's not, the holding tank will be needed at the start of the pump job
                 else {
-                    task.from = precedingTask.to;
+                    task.from = precedingTask.from;
                 }
 
                 // Update the task
                 gantt.updateTask(task);
             }
         }
-
-        addPumps();
     }
+
+    async function updateAllPumps() {
+
+        let allTasks = getAllTasks();
+
+        // Remove idle pump tasks
+        ganttData.tasks = ganttData.tasks.filter(task => task.category !== "Idle Pump");
+
+        // Loop over pump tasks
+        let pumpTasks = ganttData.tasks.filter(task => task.category === "Pump");
+        for (let pumpTask of pumpTasks) {
+            let mixTask = ganttData.tasks.find(task => task.id === pumpTask.mixId);
+            let holdTask = ganttData.tasks.find(task => task.id === pumpTask.holdId);
+
+            // Ensure that the associated Mix and Hold tasks were found
+            if (!mixTask || !holdTask) continue;
+
+            // Calculate pump duration and times
+            let pumpDuration = Math.ceil(holdTask.lbs / (productInfo[mixTask.product]?.pumpRateLbsPerMin ?? 200) / 15) * 15 * 60000;
+
+            let upstreamTasks = ganttData.dependencies.filter(dep => dep.toId === pumpTask.id);
+            let upstreamTask = allTasks.find(task => task.id === upstreamTasks[0]?.fromId);
+            console.log('upstreamTask', upstreamTask);
+            let upstreamTime = upstreamTask ? upstreamTask.to : Number.MIN_SAFE_INTEGER;
+            let downstreamTime = holdTask.category === "Hold" ? holdTask.from : Number.MIN_SAFE_INTEGER;
+
+            let pumpFrom = Math.max(upstreamTime, downstreamTime);
+            let pumpTo = pumpFrom + pumpDuration;
+
+            // Update the pump task
+            pumpTask.to = pumpTo;
+
+            gantt.updateTask(pumpTask);
+
+            // Wait for 25 milliseconds before proceeding
+            await new Promise(r => setTimeout(r, 25));
+
+            pumpTask.to = pumpTo;
+            pumpTask.runTime = pumpDuration;
+            pumpTask.resourceId = mixTask.resourceId;
+
+            gantt.updateTask(pumpTask);
+        }
+
+        // Add idle pump tasks if necessary
+        let allMixTasks = ganttData.tasks.filter(task => task.category === "Mix");
+        let maxId = Math.max(...allTasks.filter(task => !isNaN(task.id)).map(task => Number(task.id)));
+        for (let mixTask of allMixTasks) {
+            let pumpTasksForMix = ganttData.tasks.filter(task => task.category === "Pump" && task.mixId === mixTask.id);
+            pumpTasksForMix.sort((a, b) => a.from - b.from);
+
+            for (let i = 0; i < pumpTasksForMix.length - 1; i++) {
+                let gap = pumpTasksForMix[i + 1].from - pumpTasksForMix[i].to;
+                if (gap > 0) {
+                    let idleTime = pumpTasksForMix[i + 1].from - pumpTasksForMix[i].to;
+
+                    let pumpIdleTask = {
+                        id: ++maxId,
+                        from: pumpTasksForMix[i].to,
+                        to: pumpTasksForMix[i].to + idleTime,
+                        resourceId: mixTask.resourceId,
+                        mixId: mixTask.id,
+                        label: "Waiting",
+                        product: mixTask.product,
+                        runTime: idleTime,
+                        setupTime: 0,
+                        changeoverTime: 0,
+                        classes: "setup-task",
+                        enableDragging: false,
+                        category: "Idle Pump"
+                    };
+
+                    ganttData.tasks.push(pumpIdleTask);
+                }
+            }
+        }
+    }
+
 
 
     function snapback() {

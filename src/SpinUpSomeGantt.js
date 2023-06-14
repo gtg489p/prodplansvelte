@@ -209,28 +209,71 @@ export default function getDummyGanttData() {
           idleTime: 0,
           classes: []
         },
+        {
+          id: 9,
+          from: new Date(time("6:00")).getTime(),
+          to: new Date(time("6:00")).getTime() + 9900000,
+          resourceId: 1,
+          mixId: 1,
+          holdId: 2,
+          label: "Pump",
+          product: "Shampoo A",
+          runTime: 9900000, //Math.ceil(holdTask.lbs / (productInfo[mixTask.product]?.pumpRateLbsPerMin ?? 200) / 15) * 15 * 60000;
+          setupTime: 0,
+          changeoverTime: 0,
+          classes: "setup-task",
+          //enableDragging: false,
+          category: "Pump",
+          lbs: 24000
+        },
+        {
+          id: 10,
+          from: new Date(time("6:00")).getTime() ,
+          to: new Date(time("6:00")).getTime() + 9900000 ,
+          resourceId: 1,
+          mixId: 1,
+          holdId: 3,
+          label: "Pump",
+          product: "Shampoo A",
+          runTime: 9900000, //Math.ceil(holdTask.lbs / (productInfo[mixTask.product]?.pumpRateLbsPerMin ?? 200) / 15) * 15 * 60000;
+          setupTime: 0,
+          changeoverTime: 0,
+          classes: "setup-task",
+          //enableDragging: false,
+          category: "Pump",
+          lbs: 24000
+        }
       ],
     dependencies: [{
         id: 1,
         fromId: 1,
-        toId: 2,
-        stroke:"green"
-    }, 
+        toId: 9,
+    },
     {
         id: 2,
         fromId: 1,
-        toId: 3
+        toId: 10,
+    },
+    {
+        id: 3,
+        fromId: 9,
+        toId: 2
     }, 
     {
         id: 4,
+        fromId: 10,
+        toId: 3
+    }, 
+    {
+        id: 5,
         fromId: 2,
         toId: 4
     }, 
     {
-        id: 5,
+        id: 6,
         fromId: 3,
         toId: 5
-    }, 
+    },
     {
         id: 7,
         fromId: 7,
