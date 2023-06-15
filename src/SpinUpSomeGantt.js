@@ -178,7 +178,7 @@ export default function getDummyGanttData() {
         {
           id: 7,
           job: "Job 2",
-          resourceId: 2,
+          resourceId: 1,
           label: "Mix Job 2",
           from: new Date(time("6:00")).getTime(),
           to: new Date(time("12:00")).getTime(),

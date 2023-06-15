@@ -188,7 +188,7 @@
         let movingResourceId = movingTask.resourceId;
 
         // Check if the resourceId has changed
-        if (originalResourceId !== movingResourceId) {
+        if (movingTask.category != 'Mix' && originalResourceId !== movingResourceId) {
             let originalResource = ganttData.rows.find(row => row.id === originalResourceId);
             let movingResource = ganttData.rows.find(row => row.id === movingResourceId);
 
@@ -206,20 +206,13 @@
                 await new Promise(r => setTimeout(r, 25));
 
                 // Use the updateTask method from Svelte Gantt to redraw the task in its original place
-                console.log('originalTaskState',originalTaskState, originalTaskState.from, movingTask.from)
                 movingTask.to = originalTaskState.to
                 movingTask.resourceId = originalTaskState.resourceId
                 gantt.updateTask(movingTask);
             }
         }
-    }
-
-    async function mixLaneChange(movingTask) {
-        let originalResourceId = originalTaskState.resourceId;
-        let movingResourceId = movingTask.resourceId;
-
         // Check if the task category is 'Mix' and if the resourceId has changed
-        if (movingTask.category === 'Mix' && originalResourceId !== movingResourceId) {
+        else if (movingTask.category === 'Mix' && originalResourceId !== movingResourceId) {
             let originalResource = ganttData.rows.find(row => row.id === originalResourceId);
             let movingResource = ganttData.rows.find(row => row.id === movingResourceId);
 
@@ -308,6 +301,13 @@
 
             let rangeStart = otherTask.model.from - (otherTask.model.product === movingTask.product ? otherTask.model.setupTime : otherTask.model.changeoverTime);
             let rangeEnd = otherTask.model.to + (otherTask.model.product === movingTask.product ? movingTask.setupTime : movingTask.changeoverTime);
+            let pumpTasks = [];
+
+            // If otherTask is a Mix task, find all associated Pump tasks and update rangeEnd accordingly
+            if (otherTask.model.category === 'Mix' && movingTask.category === 'Mix' && otherTask.model.id !== movingTask.id) {
+                pumpTasks=ganttData.tasks.filter(task => task.category === "Pump" && task.mixId === otherTask.model.id && task.resourceId === otherTask.model.resourceId);
+                
+            }
 
             let movingTaskMiddle = movingTask.from + (movingTask.to - movingTask.from) / 2;
 
@@ -315,7 +315,18 @@
                 (movingTask.to <= rangeEnd && movingTask.to > rangeStart) ||
                 (movingTask.from <= rangeStart && movingTask.to >= rangeEnd)) {
 
-                let overlapPct = (movingTaskMiddle - otherTask.model.from) / (otherTask.model.to - otherTask.model.from);
+                let overlapPct = (movingTaskMiddle - otherTask.model.from) / (otherTask.model.to  - otherTask.model.from);
+
+                if (otherTask.model.category === 'Mix' && movingTask.category === 'Mix' && otherTask.model.id !== movingTask.id && pumpTasks.length > 0){
+                    overlapPct = 0.01;
+                }
+                
+                if (otherTask.model.category === 'Pump' && movingTask.category === 'Mix' && otherTask.model.id !== movingTask.id) {
+                    overlapPct = 0.99;
+
+                }
+                
+
                 console.log(`Task ${movingTask.id} overlapped with Task ${otherTask.model.id} on resource ${movingTask.resourceId} at ${overlapPct * 100}%`);
 
                 bumpedTasks.push({ // Push bumped task and overlap percentage into the array
@@ -323,10 +334,24 @@
                     overlapPct: overlapPct
                 });
             }
+
+            // If a mix tries to weasel between another mix and it's pumps
+            else if (otherTask.model.category === 'Mix' && movingTask.category === 'Mix' && otherTask.model.id !== movingTask.id && pumpTasks.length > 0) {
+                    let firstPumpStart = Math.min(...pumpTasks.map(pumpTask => pumpTask.from));
+                    if (movingTaskMiddle >= otherTask.model.to && movingTaskMiddle < firstPumpStart) {
+                        let overlapPct = 0.1;
+
+                        bumpedTasks.push({ // Push bumped task and overlap percentage into the array
+                            bumpedTask: otherTask.model,
+                            overlapPct: overlapPct
+                        });
+                    }
+                }
         }
 
         return bumpedTasks; // Return the array of bumped tasks
     }
+
 
 
     function checkDependencyOverlap(movingTask, origMovingTask) {
@@ -788,10 +813,8 @@
         gantt.api.tasks.on.changed (async (event) => {
             let movingTask = event[0].task.model;
             console.log('movingTask', movingTask, findMixAndFillIds(movingTask));
-            
-            //stayInYourLane(movingTask);
 
-            mixLaneChange(movingTask);
+            stayInYourLane(movingTask);
 
             // check if task is resized
             if ((movingTask.to - movingTask.from) !== (originalTaskState.to - originalTaskState.from)) {
