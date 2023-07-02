@@ -4,18 +4,20 @@
     import { time } from '../../utils';
     import moment from 'moment';
     import Icon from '@iconify/svelte';
-    import { Tooltip } from 'flowbite-svelte'
+    import { Tooltip, SpeedDial, SpeedDialButton, Modal, } from 'flowbite-svelte'
     import getDummyGanttData from '../../SpinUpSomeGantt';
+    import ResourceTypePicker from '../../ResourceTypePicker.svelte';
+    import ResourceOptions from '../../ResourceOptions.svelte';
 	import { construct_svelte_component } from 'svelte/internal';
-
+    import {zipStore, ganttDataStore, newOrEditResourceStore, resourceOptionsPageStore, resourceOptionsForm, resourceOptionsModalStore } from '../../store.js';
+    import toast, { Toaster } from 'svelte-french-toast';
+ 
     export let data;
-
 
     const currentDate = new Date();
     const today = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
     const currentStart = time('06:00');
     const currentEnd = time('18:00');
-
     
     // Create a map to store the original state of tasks
     let originalTaskState = {};
@@ -34,28 +36,15 @@
         });
     }
 
-    let ganttData;
-    ganttData = (data.ganttData && Object.keys(data.ganttData).length !== 0) ? data.ganttData : getDummyGanttData();
-
-    // Reactive statement to post-process ganttData whenever it changes
-    ganttData = postProcessGanttData(ganttData);
-
-    function postProcessGanttData(ganttData) {
-        for(let row of ganttData.rows) {
-            if(row.category === "Mix") {
-                row.classes = "mix-row";
-            } else if(row.category === "Hold") {
-                row.classes = "holding-row";
-            } else if(row.category === "Fill") {
-                row.classes = "filling-row";
-            }
-        }
-        return ganttData;
+    let ganttData = {
+        rows: data.resources,
+        tasks: data.jobs,
+        dependencies: data.dependencies,
     }
 
     let productInfo={
-        'Shampoo A':{'category':'Shampoo','pumpRateLbsPerMin': 150},
-        'Conditioner A':{'category':'Conditioner','pumpRateLbsPerMin': 200},
+        'Shampoo A':{'category':'Shampoo','pumpRateGallonsPerMin': 20},
+        'Conditioner A':{'category':'Conditioner','pumpRateGallonsPerMin': 15},
     }
 
     let options = {
@@ -73,8 +62,8 @@
         minWidth: 1000,
         from: currentStart.clone().startOf('day'),
         to: currentStart.clone().endOf('day'),
-        tableHeaders: [{ title: 'Label', property: 'label', width: 140, type: 'tree' }],
-        tableWidth: 140,
+        tableHeaders: [{ title: 'Resources', property: 'label', width: 160, type: 'tree' }],
+        tableWidth: 160,
         ganttTableModules: [SvelteGanttTable],
         ganttBodyModules: [SvelteGanttDependencies],
         taskElementHook: (node, task) => {
@@ -101,8 +90,75 @@
         },
 
     }
-    
-    
+
+    async function editResource(clickedResourceName){
+        // Set the id, so that the ResourceOptions component knows which resource to edit
+        $resourceOptionsForm.id = ganttData.rows.find(resource => resource.name === clickedResourceName).id;
+        
+        $newOrEditResourceStore = 'edit';
+        $resourceOptionsPageStore = 'options';
+        $resourceOptionsModalStore = true;
+    }
+
+    async function updateResources() {
+        try {
+        const response = await fetch('/api/SupabaseGetResources');
+        
+        if (!response.ok) {
+            throw new Error(`An error has occurred: ${response.status}`);
+        }
+
+        const result = await response.json();
+        if (!result || !result.resources) {
+            throw new Error('Unexpected response format');
+        }
+
+        ganttData.rows = result.resources;
+        options.rows = ganttData.rows;
+        gantt.$set(options);
+
+        } catch (err) {
+        console.error('Fetching data failed:', err);
+        }
+    }
+
+    async function setupResourceButtons(ganttData) {
+        // Check if ganttData is an object and it has a property 'rows' which is an array
+        if (typeof ganttData !== 'object' || !Array.isArray(ganttData.rows)) {
+            console.log('Invalid ganttData format. Expected an object with a "rows" array property.');
+            return;
+        }
+
+        ganttData.rows.forEach(resource => {
+      
+            // Check if resource is an object and it has a property 'name' which is a string
+            if (typeof resource !== 'object' || typeof resource.name !== 'string') {
+                console.log('Invalid resource format in ganttData.rows. Expected an object with a "name" string property.');
+                return;
+            }
+
+            let id = resource.name;
+            const button = document.getElementById(id);
+            // Check if button is a valid DOM element
+            if (!button) {
+                console.log(`No DOM element found with id "${id}"`);
+                return;
+            }
+
+            // Remove any pre-existing event listeners
+            let newButton = button.cloneNode(true);
+            button.parentNode.replaceChild(newButton, button);
+
+            // Add the new event listener
+            newButton.addEventListener('click', () => {
+                console.log(`${id} was clicked`);
+                editResource(id);
+                
+            });
+        });
+    }
+
+
     function refreshGanttData() {
 
         let start = moment().startOf('week');
@@ -136,8 +192,8 @@
             minWidth: 1000,
             from: currentStart,
             to: currentEnd,
-            tableHeaders: [{ title: 'Label', property: 'label', width: 140, type: 'tree' }],
-            tableWidth: 140,
+            tableHeaders: [{ title: 'Resources', property: 'label', width: 160, type: 'tree' }],
+            tableWidth: 160,
             ganttTableModules: [SvelteGanttTable],
             ganttBodyModules: [SvelteGanttDependencies],
             taskElementHook: (node, task) => {
@@ -172,6 +228,10 @@
         }
         gantt.$set(options);
 
+    }
+
+    function handleClick() {
+        console.log('The button was clicked');
     }
 
     function addMouseDownEventListener(node, task) {
@@ -656,7 +716,7 @@
             // For each hold task, create a pump task
             subsequentHoldTasks.forEach(holdTask => {
                 // Compute the pump duration
-                let pumpDuration = Math.ceil(holdTask.lbs / (productInfo[mixTask.product]?.pumpRateLbsPerMin ?? 200) / 15) * 15 * 60000;
+                let pumpDuration = Math.ceil(holdTask.gallons / (productInfo[mixTask.product]?.pumpRateGallonsPerMin ?? 200) / 15) * 15 * 60000;
 
                 // Find all existing pump tasks for this mixTask on the same resource
                 let existingPumpTasks = ganttData.tasks.filter(task => task.category === "Pump" && task.mixId === mixTask.id && task.resourceId === mixTask.resourceId);
@@ -685,7 +745,7 @@
                     classes: "setup-task",
                     enableDragging: false,
                     category: "Pump",
-                    lbs: holdTask.lbs
+                    gallons: holdTask.gallons
                 };
 
                 console.log('adding pump task:', pumpTask)
@@ -779,37 +839,56 @@
         return { breakOverlapTime: totalOverlap, timeRangeDuration };
     }
 
+    function subscribe() {  
+        console.log('subscribed')
+        const sse = new EventSource('/api/DbChange');  
+        sse.onmessage = (e) => {  
+            let server_update = JSON.parse(e.data);  
+            console.log('Resoure table update detected!',server_update)
+            updateResources();
+
+        };  
+        return () => sse.close();  
+        } 
+
 
     let gantt;
-    onMount(() => {
+    onMount(async () => {
+       
         window.gantt = gantt = new SvelteGantt({ target: document.getElementById('example-gantt'), props: options });
-        const external = new SvelteGanttExternal(document.getElementById('new-task'), {
-            gantt,
-            onsuccess: (row, date, gantt) => {
-                console.log(row.model.id, new Date(date).toISOString())
-                const id = 5000 + Math.floor(Math.random() * 1000);
-                gantt.updateTask({
-                    id,
-                    label: `Task #${id}`,
-                    from: date,
-                    to: date + 3 * 60 * 60 * 1000,
-                    resourceId: row.model.id
+
+        // Wait for next microtask to ensure the divs are created by the chart package
+        // You may need to adjust this depending on how your chart package works
+        await Promise.resolve();
+
+        // Setup a MutationObserver to watch for new elements with class 'resource'
+        const observer = new MutationObserver((mutationsList, observer) => {
+            // Look through all mutations that just occured
+            for(let mutation of mutationsList) {
+            // If the addedNodes property has one or more nodes
+            if(mutation.addedNodes.length) {
+                const divs = document.querySelectorAll('.resource');
+                divs.forEach(div => {
+                div.addEventListener('click', event => {
+                    // Call editResource with the id of the clicked div
+                    editResource(event.target.id);
                 });
-            },
-            elementContent: () => {
-                const element = document.createElement('div');
-                element.innerHTML = 'New Task';
-                element.className = 'sg-external-indicator';
-                return element;
+                });
+            }
             }
         });
 
+        // Start observing the document with the configured parameters
+        observer.observe(document.body, { childList: true, subtree: true });
+        
+
+        
+        console.log('gantt',gantt )
         // Listen for the task drop event
         gantt.api.tasks.on.dblclicked((task) => {
             console.log("Task is select:", task);
         });
 
- 
         gantt.api.tasks.on.changed (async (event) => {
             let movingTask = event[0].task.model;
             console.log('movingTask', movingTask, findMixAndFillIds(movingTask));
@@ -868,6 +947,12 @@
             
         });
 
+        
+
+        // Set up realtime updates from supabase
+        const unsub = subscribe();  
+        return unsub;
+
 
     });
 
@@ -879,7 +964,7 @@
             <table class="sg-popup-table" style="border-collapse: collapse; width: 100%;">
                 <tr style="border-bottom: 1px solid #ddd;"><th style="text-align: left;">Task</th><td>${task.label}</td></tr>
                 <tr style="border-bottom: 1px solid #ddd;"><th style="text-align: left;">Product</th><td>${task.product}</td></tr>
-                <tr style="border-bottom: 1px solid #ddd;"><th style="text-align: left;">Lbs</th><td>${task.lbs}</td></tr>
+                <tr style="border-bottom: 1px solid #ddd;"><th style="text-align: left;">gallons</th><td>${task.gallons}</td></tr>
                 <tr style="border-bottom: 1px solid #ddd;"><th style="text-align: left;">Start</th><td>${new Date(task.from).toLocaleTimeString()}</td></tr>
                 <tr style="border-bottom: 1px solid #ddd;"><th style="text-align: left;">End</th><td>${new Date(task.to).toLocaleTimeString()}</td></tr>
                 <tr style="border-bottom: 1px solid #ddd;"><th style="text-align: left;">Runtime</th><td>${task.runTime / 60000} minutes</td></tr>
@@ -1135,7 +1220,7 @@
             if (!mixTask || !holdTask) continue;
 
             // Calculate pump duration and times
-            let pumpDuration = Math.ceil(holdTask.lbs / (productInfo[mixTask.product]?.pumpRateLbsPerMin ?? 200) / 15) * 15 * 60000;
+            let pumpDuration = Math.ceil(holdTask.gallons / (productInfo[mixTask.product]?.pumpRateGallonsPerMin ?? 50) / 15) * 15 * 60000;
 
             let upstreamTasks = ganttData.dependencies.filter(dep => dep.toId === pumpTask.id);
             let upstreamTask = allTasks.find(task => task.id === upstreamTasks[0]?.fromId);
@@ -1198,30 +1283,12 @@
 
 
     function snapback() {
-        
-        console.log(gantt.getTasks(4))
-
-        // ganttData.rows.forEach(row => {
-        //     const tasks = gantt.getTasks(row.id);
-        //     if(tasks){
-        //         tasks.forEach(task => {
-        //             let taskData = task.model;
-        //             // Find task in ganttData.tasks by id
-        //             let existingTask = ganttData.tasks.find(task => task.id === taskData.id);
-
-        //             if(existingTask){
-        //                 // Update existing properties and add new properties
-        //                 Object.keys(taskData).forEach(prop => {
-        //                     existingTask[prop] = taskData[prop];
-        //                 });
-        //             } else {
-        //                 // Insert new task in ganttData.tasks
-        //                 ganttData.tasks.push(taskData);
-        //             }
-        //         });
-        //     }
-        // });
+        toast('Hello Darkness!', {
+                icon: '👏',
+                style: 'border-radius: 200px; background: #333; color: #fff;'
+            });
         console.log('ganttData post zoink', ganttData)
+        console.log('$resourceOptionsForm',$resourceOptionsForm)
     };
 
     function getAllTasks() {
@@ -1340,9 +1407,80 @@
         refreshGanttData();
     }
 
-
+    function handleShareClick(event) {
+        // Perform the action you want when the "Share" button is clicked
+        console.log('Share button was clicked!');
+    }
 
 </script>
+
+<Toaster />
+
+<header class="header">
+    <div class="header flex justify-center bg-gray-200">
+        <button on:click={onSetPreviousDay}><Icon icon="material-symbols:skip-previous" width="30" height="30" color="red"/></button>
+        <Tooltip  color="yellow">Previous Day</Tooltip>
+        <button on:click={onSetDayView}><Icon icon="material-symbols:clear-day" width="30" height="30" color="red"/></button>
+        <Tooltip  color="yellow">Go to Today</Tooltip>
+        <button on:click={onSetNextDay}><Icon icon="material-symbols:skip-next" width="30" height="30" color="red"/></button>
+        <Tooltip  color="yellow">Next Day</Tooltip>
+        <button on:click={onSetWeekView}><Icon icon="mdi:calendar-week" width="30" height="30" color="red"/></button>
+        <Tooltip  color="yellow">Go to This Week</Tooltip>
+
+        <button on:click={snapback}><Icon icon="game-icons:brutal-helm" width="30" height="30" color="red"/></button>
+        <Tooltip  color="yellow">Zoink</Tooltip>
+
+        <button on:click={wipeGanttData}><Icon icon="ion:trash-sharp" width="30" height="30" color="red"/></button>
+        <Tooltip  color="yellow">Clear</Tooltip>
+
+        <button on:click={syncGanttData}><Icon icon="material-symbols:save-sharp" width="30" height="30" color="red"/></button>
+        <Tooltip  color="yellow">Save</Tooltip>
+        
+    </div>
+</header>
+<div class="w-full">
+    <div id="example-gantt"></div>
+    <div class="fixed right-6 bottom-12 z-10 !m-0" id="speed-dial">
+        <SpeedDial color='purpleToPink' gradient defaultClass="absolute right-6 bottom-6" placement="left">
+       
+            <SpeedDialButton name="Add Resource" on:click={()=>($resourceOptionsModalStore = true)}>
+                <Icon icon="ion:construct-sharp" color="red" width="32" height="32"/>
+            </SpeedDialButton>
+        
+            <SpeedDialButton name="Add Job">
+                <Icon icon="fluent-emoji-high-contrast:soap" color="red" width="32" height="32" />
+            </SpeedDialButton>
+            <SpeedDialButton name="Download">
+                <svg aria-hidden="true" class="w-6 h-6" fill="red" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path clip-rule="evenodd" d="M4 4a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V8a2 2 0 00-2-2h-5L9 4H4zm7 5a1 1 0 00-2 0v1.586l-.293-.293a.999.999 0 10-1.414 1.414l2 2a.999.999 0 001.414 0l2-2a.999.999 0 10-1.414-1.414l-.293.293V9z" fill-rule="evenodd"></path></svg>
+            </SpeedDialButton>
+            <SpeedDialButton name="Copy">
+                <svg aria-hidden="true" class="w-6 h-6" fill="red" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M7 9a2 2 0 012-2h6a2 2 0 012 2v6a2 2 0 01-2 2H9a2 2 0 01-2-2V9z"></path><path d="M5 3a2 2 0 00-2 2v6a2 2 0 002 2V5h8a2 2 0 00-2-2H5z"></path></svg>
+            </SpeedDialButton>
+        </SpeedDial>
+    </div>
+    <!-- <GanttOptions options={options} on:change={onChangeOptions}/> -->
+</div>
+
+<Modal 
+    title={
+        $resourceOptionsForm.selectedCategory == 'Fill' ? "Add Filling Line" :
+        $resourceOptionsForm.selectedCategory == 'Hold' ? "Add Holding Tank" :
+        $resourceOptionsForm.selectedCategory == 'Mix' ? "Add Mixing Tank" :
+        "Add Factory Asset"
+    } 
+    bind:open={$resourceOptionsModalStore} 
+    size="lg" 
+    autoclose={false} 
+>
+    <div>
+        {#if $resourceOptionsPageStore === 'type'}
+            <ResourceTypePicker />
+        {:else}
+            <ResourceOptions resources = {data.resources}/> 
+        {/if}
+    </div>
+</Modal>
+
 
 <style>
 
@@ -1381,15 +1519,15 @@
     ); /* diagonal lines */
     }
 
-    :global(.mix-row) {
+    :global(.Mix-row) {
         background-color: rgba(0, 123, 255, 0.1); /* light, semi-transparent blue */
     }
 
-    :global(.holding-row) {
+    :global(.Hold-row) {
         background-color: rgba(255, 238, 0, 0.1); /* light, semi-transparent orange */
     }
 
-    :global(.filling-row) {
+    :global(.Fill-row) {
         background-color: rgba(0, 128, 0, 0.1); /* light, semi-transparent green */
     }
 
@@ -1466,34 +1604,6 @@
   .dropdown:hover .dropdown-menu {
     display: block;
   }
-
 </style>
 
 
-<header class="header">
-    <div class="header flex justify-center bg-gray-200">
-        <button on:click={onSetPreviousDay}><Icon icon="material-symbols:skip-previous" width="30" height="30" color="red"/></button>
-        <Tooltip  color="yellow">Previous Day</Tooltip>
-        <button on:click={onSetDayView}><Icon icon="material-symbols:clear-day" width="30" height="30" color="red"/></button>
-        <Tooltip  color="yellow">Go to Today</Tooltip>
-        <button on:click={onSetNextDay}><Icon icon="material-symbols:skip-next" width="30" height="30" color="red"/></button>
-        <Tooltip  color="yellow">Next Day</Tooltip>
-        <button on:click={onSetWeekView}><Icon icon="mdi:calendar-week" width="30" height="30" color="red"/></button>
-        <Tooltip  color="yellow">Go to This Week</Tooltip>
-
-        <button on:click={snapback}><Icon icon="game-icons:brutal-helm" width="30" height="30" color="red"/></button>
-        <Tooltip  color="yellow">Zoink</Tooltip>
-
-        <button on:click={wipeGanttData}><Icon icon="ion:trash-sharp" width="30" height="30" color="red"/></button>
-        <Tooltip  color="yellow">Clear</Tooltip>
-
-        <button on:click={syncGanttData}><Icon icon="material-symbols:save-sharp" width="30" height="30" color="red"/></button>
-        <Tooltip  color="yellow">Save</Tooltip>
-        
-    </div>
-</header>
-<div class="w-full">
-    <div id="example-gantt"></div>
-    <div id="new-task">Drag to gantt</div> 
-    <!-- <GanttOptions options={options} on:change={onChangeOptions}/> -->
-</div>

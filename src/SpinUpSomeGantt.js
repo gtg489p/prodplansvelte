@@ -1,78 +1,89 @@
-// SpinUpSomeGantt.js
+//SpinUpSomeGantt.js
 
 import { time } from './utils';
 
 export default function getDummyGanttData() {
   return {
     rows: [{
-        id: 1,
-        label: "Mixer 1, 48k Lbs, Direct",
-        name: "Mixer 1",
-        category: "Mix",
-        size: 48000
+      id: 1,
+      label: "Mixer 1, 6k Gal",
+      name: "Mixer 1",
+      category: "Mix",
+      direct: ['Filler 2','Filler 3'],
+      gallons: 6000,
+      headerHtml: '<button type="button" id="MT02">MT02: 6,000 gal., DM, Jacketed.</button>'
+    },    
+    {
+      id: 2,
+      label: "Mixer 2 - 6k Gal",
+      name: "Mixer 2",
+      category: "Mix",
+      gallons: 6000
     }, 
     {
-        id: 2,
-        label: "Mixer 2 - 48k Lbs",
-        name: "Mixer 2",
-        category: "Mix",
-        size: 48000
+      id: 3,
+      label: "Mixer 3 - 3k Gal",
+      name: "Mixer 3",
+      category: "Mix",
+      gallons: 3000
     }, 
     {
-        id: 3,
-        label: "Mixer 3 - 24k Lbs",
-        name: "Mixer 3",
-        category: "Mix",
-        size: 24000
+      id: 4,
+      label: "Holding 1 - 3k Gal",
+      name: "Holding 1",
+      category: "Hold",
+      gallons: 3000
     }, 
     {
-        id: 4,
-        label: "Holding 1 - 24k Lbs",
-        name: "Holding 1",
-        category: "Hold",
-        size: 24000
-    }, 
-    {
-        id: 5,
-        label: "Holding 2 - 24k Lbs",
-        name: "Holding 2",
-        category: "Hold",
-        size: 24000
+      id: 5,
+      label: "Holding 2 - 3k Gal",
+      name: "Holding 2",
+      category: "Hold",
+      gallons: 3000
     },
     {
-        id: 6,
-        label: "Holding 3 - 24k Lbs",
-        name: "Holding 3",
-        category: "Hold",
-        size: 24000
+      id: 6,
+      label: "Holding 3 - 3k Gal",
+      name: "Holding 3",
+      category: "Hold",
+      gallons: 3000
     },
-  {
+    {
       id: 7,
-      label: "Holding 4 - 4k Lbs",
+      label: "Holding 4 - 3k Gal",
       name: "Holding 4",
       category: "Hold",
-      size: 4000
-  },
-  {
+      gallons: 3000
+    },
+    {
       id: 8,
-      label: "Holding 5 - 4k Lbs",
+      label: "Holding 5 - 3k Gal",
       name: "Holding 5",
       category: "Hold",
-      size: 4000
-  },
+      gallons: 3000
+    },
     {
       id: 9,
       label: "Filler 1",
       name: "Filler 1",
-      category: "Fill"
-  }, 
-  {
-    id: 10,
-    label: "Filler 2",
-    name: "Filler 2",
-    category: "Fill"
-}
-  
+      category: "Fill",
+      rate: {'Shampoo A': 125, 'Shampoo B': 125, 'Conditioner A': 125}
+    }, 
+    {
+      id: 10,
+      label: "Filler 2",
+      name: "Filler 2",
+      category: "Fill",
+      rate: {'Shampoo A': 125, 'Shampoo B': 125, 'Conditioner A': 125}
+    },
+    {
+      id: 11,
+      label: "Filler 3",
+      name: "Filler 3",
+      category: "Fill",
+      rate: {'Shampoo A': 125, 'Shampoo B': 125, 'Conditioner A': 125}
+    }
+    
   ],
     tasks: [
         {
@@ -84,7 +95,7 @@ export default function getDummyGanttData() {
             to: new Date(time("10:00")).getTime(),
             product: 'Shampoo A',
             category: "Mix",
-            lbs: 48000,
+            gallons: 6000,
             processTime: 10800000, // 4 hours,
             runTime: 10800000, // 4 hours,
             setupTime: 900000, // 15 min,
@@ -92,7 +103,7 @@ export default function getDummyGanttData() {
             idleTime: 0,
             classes: [],
             amountDone: 55,
-            showButton: true,
+            showButton: false,
             // html: `
             //   <div style="position: relative; width: 100%; height: 100%;">
             //     <div>Job 1</div>
@@ -115,13 +126,15 @@ export default function getDummyGanttData() {
           to: new Date(time("8:00")).getTime(),
           product: 'Shampoo A',
           category: "Hold",
-          lbs: 24000,
+          gallons: 3000,
           processTime: 7200000, // 2 hours
           runTime: 7200000, // 2 hours
           setupTime: 900000, // 15 min,
           changeoverTime: 3600000, // 1 hour,
           idleTime: 0,
-          classes: []
+          classes: [],
+          amountDone: 0,
+          showButton: false,
         },
         {
           id: 3,
@@ -132,13 +145,15 @@ export default function getDummyGanttData() {
           to: new Date(time("8:00")).getTime(),
           product: 'Shampoo A',
           category: "Hold",
-          lbs: 24000,
+          gallons: 3000,
           processTime: 7200000, // 2 hours
           runTime: 7200000, // 2 hours
           setupTime: 900000, // 15 min,
           changeoverTime: 3600000, // 1 hour,
           idleTime: 0,
-          classes: []
+          classes: [],
+          amountDone: 0,
+          showButton: false,
         },
         {
           id: 4,
@@ -149,13 +164,16 @@ export default function getDummyGanttData() {
           to: new Date(time("11:00")).getTime() + 21600000,
           product: 'Shampoo A',
           category: "Fill",
-          lbs: 24000,
+          gallons: 3000,
+          pc: 30000,
           processTime: 21600000, // 6 hour
           runTime: 21600000, // 6 hour
           setupTime: 900000, // 15 min,
           changeoverTime: 3600000, // 1 hour,
           idleTime: 0,
-          classes: []
+          classes: [],
+          amountDone: 0,
+          showButton: false,
         },
         {
           id: 5,
@@ -166,13 +184,15 @@ export default function getDummyGanttData() {
           to: new Date(time("11:00")).getTime() + 21600000 + 21600000 ,
           product: 'Shampoo A',
           category: "Fill",
-          lbs: 24000,
+          gallons: 3000,
           processTime: 21600000, // 6 hour
           runTime: 21600000, // 6 hour
           setupTime: 900000, // 15 min,
           changeoverTime: 3600000, // 1 hour,
           idleTime: 0,
-          classes: []
+          classes: [],
+          amountDone: 0,
+          showButton: false,
         },
         
         {
@@ -184,13 +204,15 @@ export default function getDummyGanttData() {
           to: new Date(time("12:00")).getTime(),
           product: 'Conditioner A',
           category: "Mix",
-          lbs: 48000,
+          gallons: 6000,
           processTime: 21600000 , // 6 hour
           runTime: 21600000 , // 6 hour
           setupTime: 900000, // 15 min,
           changeoverTime: 3600000, // 1 hour,
           idleTime: 0,
-          classes: []
+          classes: [],
+          amountDone: 0,
+          showButton: false,
         },
         {
           id: 8,
@@ -201,47 +223,55 @@ export default function getDummyGanttData() {
           to: new Date(time("18:00")).getTime(),
           product: 'Conditioner A',
           category: "Fill",
-          lbs: 48000,
+          gallons: 6000,
           processTime: 21600000 , // 6 hour
           runTime: 21600000 , // 6 hour
           setupTime: 900000, // 15 min,
           changeoverTime: 3600000, // 1 hour,
           idleTime: 0,
-          classes: []
+          classes: [],
+          amountDone: 0,
+          showButton: false,
         },
         {
           id: 9,
+          job: "Job 1",
+          label: "Pump",
           from: new Date(time("6:00")).getTime(),
           to: new Date(time("6:00")).getTime() + 9900000,
           resourceId: 1,
           mixId: 1,
           holdId: 2,
-          label: "Pump",
           product: "Shampoo A",
-          runTime: 9900000, //Math.ceil(holdTask.lbs / (productInfo[mixTask.product]?.pumpRateLbsPerMin ?? 200) / 15) * 15 * 60000;
+          category: "Pump",
+          gallons: 3000,
+          runTime: 9900000, //Math.ceil(holdTask.gallons / (productInfo[mixTask.product]?.pumpRateGallonsPerMin ?? 200) / 15) * 15 * 60000;
           setupTime: 0,
           changeoverTime: 0,
+          idleTime: 0,
           classes: "setup-task",
-          //enableDragging: false,
-          category: "Pump",
-          lbs: 24000
+          amountDone: 0,
+          showButton: false,
         },
         {
           id: 10,
+          job: "Job 1",
+          label: "Pump",
           from: new Date(time("6:00")).getTime() ,
           to: new Date(time("6:00")).getTime() + 9900000 ,
           resourceId: 1,
           mixId: 1,
           holdId: 3,
-          label: "Pump",
           product: "Shampoo A",
-          runTime: 9900000, //Math.ceil(holdTask.lbs / (productInfo[mixTask.product]?.pumpRateLbsPerMin ?? 200) / 15) * 15 * 60000;
+          category: "Pump",
+          gallons: 3000,
+          runTime: 9900000, //Math.ceil(holdTask.gallons / (productInfo[mixTask.product]?.pumpRateGallonsPerMin ?? 200) / 15) * 15 * 60000;
           setupTime: 0,
           changeoverTime: 0,
+          idleTime: 0,
           classes: "setup-task",
-          //enableDragging: false,
-          category: "Pump",
-          lbs: 24000
+          amountDone: 0,
+          showButton: false,
         }
       ],
     dependencies: [{

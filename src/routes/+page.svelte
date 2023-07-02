@@ -1,11 +1,8 @@
 <script>
-    import { SvelteGantt, SvelteGanttDependencies, SvelteGanttExternal, SvelteGanttTable, MomentSvelteGanttDateAdapter } from 'svelte-gantt';
+    import { SvelteGantt, SvelteGanttDependencies, SvelteGanttExternal, SvelteGanttTable, MomentSvelteGanttDateAdapter} from 'svelte-gantt';
     import { onMount, getContext } from 'svelte';
     import { time } from '../utils';
     import moment from 'moment';
-    import GanttOptions from '../components/GanttOptions.svelte';
-    import {Button} from 'flowbite-svelte'
-    import { ganttData as dummyGanttData } from '../SpinUpSomeGantt';
 
     const currentDate = new Date();
     const today = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
@@ -211,6 +208,9 @@
         Object.assign(options, opts);
         gantt.$set(options);
     }
+
+    
+
 </script>
 
 <style>

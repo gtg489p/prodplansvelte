@@ -29,12 +29,15 @@
 	"type": "module",
 	"dependencies": {
 		"@popperjs/core": "^2.11.7",
+		"@supabase/supabase-js": "^2.26.0",
 		"classnames": "^2.3.2",
-		"flowbite": "^1.6.4",
-		"flowbite-svelte": "^0.34.4",
+		"flowbite-svelte": "^0.38.5",
 		"ioredis": "^5.3.2",
 		"moment": "^2.29.4",
 		"pocketbase": "^0.13.1",
-		"svelte-gantt": "^4.0.9-beta"
+		"svelte-french-toast": "^1.1.0",
+		"svelte-gantt": "^4.0.9-beta",
+		"svelty-picker": "^3.5.1",
+		"ulid": "^2.3.0"
 	}
 }

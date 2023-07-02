@@ -1,32 +1,24 @@
 import redisClient from '../../redis';
+import supabase from "../../supabaseClient";
+
 
 /** @type {import('./$types').PageServerLoad} */
 export async function load({ url }) {
-
-  //const factoryId = url.searchParams.get('factoryId')
+  
   const factoryId = 'JVL'
 
-  if (!factoryId) {
-    // If layoutId is null or undefined, return an empty object
-    return {
-      factoryId: null,
-      ganttData: {}
-    };
-  }
-
+  let { data: resources} = await supabase.from('resources').select('*').order('flowOrder', { ascending: true }).order('name', { ascending: true });
+  let { data: jobs } = await supabase.from('jobs').select('*')
+  let { data: dependencies } = await supabase.from('dependencies').select('*')
+  
   const redisValue = await redisClient.get('jvl.ganttData');
 
-  if (redisValue === null) {
-    // If the Redis value is null, return an empty object
-    return {
-      factoryId: factoryId,
-      ganttData: {}
-    };
-  } else {
-    // If the Redis value is not null, parse the JSON object and return it
-    return {
-      factoryId: factoryId,
-      ganttData: JSON.parse(redisValue)
-    };
-  }
+  return {
+    factoryId: factoryId ?? null,
+    ganttData: redisValue ? JSON.parse(redisValue) : {},
+    resources: resources ?? [],
+    jobs: jobs ?? [],
+    dependencies: dependencies ?? []
+  };
+  
 }
