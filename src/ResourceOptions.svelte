@@ -7,7 +7,33 @@
 
     export let resources;
 
-    let productRateRows = [{product: 'Default', mixTime: '360', pumpRate: '20', fillRate: '200'}]; // Initialize with one row
+    let productRateRows = [];
+    if($newOrEditResourceStore === 'new'){
+      productRateRows = [{product: 'Default', mixTime: '360', pumpRate: '20', fillRate: '200'}]; // Initialize with one row
+    }
+    else if($newOrEditResourceStore === 'edit'){
+      let resource = resources.find(resource => resource.id === $resourceOptionsForm.id);
+
+      let mixTimesObj = {};
+      let pumpRatesObj = {};
+      let fillRatesObj = {};
+
+      resource.mixTimes.forEach(el => mixTimesObj[el.product] = el.mixTime);
+      resource.pumpRates.forEach(el => pumpRatesObj[el.product] = el.pumpRate);
+      resource.fillRates.forEach(el => fillRatesObj[el.product] = el.fillRate);
+
+      let allProducts = new Set([...resource.mixTimes, ...resource.pumpRates, ...resource.fillRates].map(el => el.product));
+
+      allProducts.forEach(product => {
+          productRateRows.push({
+              product: product,
+              mixTime: mixTimesObj[product] || "",
+              pumpRate: pumpRatesObj[product] || "",
+              fillRate: fillRatesObj[product] || ""
+          });
+      });
+
+    }
    
     let formValid = true;
     let uniqueName = true;
@@ -22,7 +48,6 @@
           }
       });
     }else if($newOrEditResourceStore === 'edit'){
-      console.log('in here')
       // If editing a resource, initialize form with existing values
       Object.keys($resourceOptionsForm).forEach(selectedKey => {
         let key = selectedKey.replace('selected', '');
@@ -170,7 +195,7 @@
           $resourceOptionsForm.selectedHeaderHtml = `<button type="button" id="${($resourceOptionsForm.selectedName ?? '').replaceAll(" ", "")}">${$resourceOptionsForm.selectedLabel}</button>`;    
         }
         if ($resourceOptionsForm.selectedCategory !== null) {
-          $resourceOptionsForm.selectedClasses = $resourceOptionsForm.selectedCategory + '-row';
+          $resourceOptionsForm.selectedClasses = 'factory-resource ' + $resourceOptionsForm.selectedCategory + '-row';
         }
     }
 
@@ -181,6 +206,8 @@
             uniqueName = true;
         }
     }
+
+    $: console.log('$resourceOptionsForm',$resourceOptionsForm)
 
 </script>
 
@@ -194,7 +221,7 @@
       <span class="font-medium">You missed an option!</span>
   </Alert>
   {/if}
-  {#if uniqueName == false}
+  {#if uniqueName == false && $newOrEditResourceStore == 'new'}
   <Alert color="red" class="border mb-6" >
       <span slot="icon"><svg aria-hidden="true" class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path></svg>
       </span>
@@ -204,7 +231,7 @@
     <div class="grid gap-6 md:grid-cols-4">
       <div class="mb-6">
         <FloatingLabelInput style="outlined" type="text" label="Name" bind:value={$resourceOptionsForm.selectedName}/>
-        {#if uniqueName == false}
+        {#if uniqueName == false && $newOrEditResourceStore == 'new'}
         <Helper class="mt-2" color="red">Name must be unique.</Helper>
         {/if}
       </div>

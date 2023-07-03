@@ -13,6 +13,7 @@
     import toast, { Toaster } from 'svelte-french-toast';
  
     export let data;
+    data.resources = parseJsonbColumns(data.resources)
 
     const currentDate = new Date();
     const today = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
@@ -91,6 +92,29 @@
 
     }
 
+    function parseJsonbColumns(arr) {
+        return arr.map(obj => {
+            // Parse jsonb columns
+            if ('fillRates' in obj && typeof obj.fillRates === 'string') {
+                obj.fillRates = JSON.parse(obj.fillRates);
+            }
+            if ('pumpRates' in obj && typeof obj.pumpRates === 'string') {
+                obj.pumpRates = JSON.parse(obj.pumpRates);
+            }
+            if ('mixTimes' in obj && typeof obj.mixTimes === 'string') {
+                obj.mixTimes = JSON.parse(obj.mixTimes);
+            }
+            if ('pumpToLines' in obj && typeof obj.pumpToLines === 'string') {
+                obj.pumpToLines = JSON.parse(obj.pumpToLines);
+            }
+            
+            // Return updated object
+            return obj;
+        });
+    }
+
+
+
     async function editResource(clickedResourceName){
         // Set the id, so that the ResourceOptions component knows which resource to edit
         $resourceOptionsForm.id = ganttData.rows.find(resource => resource.name === clickedResourceName).id;
@@ -120,42 +144,6 @@
         } catch (err) {
         console.error('Fetching data failed:', err);
         }
-    }
-
-    async function setupResourceButtons(ganttData) {
-        // Check if ganttData is an object and it has a property 'rows' which is an array
-        if (typeof ganttData !== 'object' || !Array.isArray(ganttData.rows)) {
-            console.log('Invalid ganttData format. Expected an object with a "rows" array property.');
-            return;
-        }
-
-        ganttData.rows.forEach(resource => {
-      
-            // Check if resource is an object and it has a property 'name' which is a string
-            if (typeof resource !== 'object' || typeof resource.name !== 'string') {
-                console.log('Invalid resource format in ganttData.rows. Expected an object with a "name" string property.');
-                return;
-            }
-
-            let id = resource.name;
-            const button = document.getElementById(id);
-            // Check if button is a valid DOM element
-            if (!button) {
-                console.log(`No DOM element found with id "${id}"`);
-                return;
-            }
-
-            // Remove any pre-existing event listeners
-            let newButton = button.cloneNode(true);
-            button.parentNode.replaceChild(newButton, button);
-
-            // Add the new event listener
-            newButton.addEventListener('click', () => {
-                console.log(`${id} was clicked`);
-                editResource(id);
-                
-            });
-        });
     }
 
 
@@ -861,29 +849,38 @@
         // You may need to adjust this depending on how your chart package works
         await Promise.resolve();
 
+        // Create a Set to store elements to which we've already added an event listener
+        let listenedElements = new Set();
+
+        // Get a set of all the resource names
+        let resourceNames = new Set(data.resources.map(resource => resource.name));
+
         // Setup a MutationObserver to watch for new elements with class 'resource'
         const observer = new MutationObserver((mutationsList, observer) => {
             // Look through all mutations that just occured
             for(let mutation of mutationsList) {
-            // If the addedNodes property has one or more nodes
-            if(mutation.addedNodes.length) {
-                const divs = document.querySelectorAll('.resource');
-                divs.forEach(div => {
-                div.addEventListener('click', event => {
-                    // Call editResource with the id of the clicked div
-                    editResource(event.target.id);
-                });
-                });
-            }
+                // If the addedNodes property has one or more nodes
+                if(mutation.addedNodes.length) {
+                    resourceNames.forEach(resourceName => {
+                        // Select the button with the id equal to the resource name
+                        let button = document.querySelector(`button[id="${resourceName}"]`);
+                        if(button && !listenedElements.has(button)) {
+                            button.addEventListener('click', event => {
+                                // Call editResource with the id of the clicked button
+                                editResource(event.target.id);
+                            });
+                            // Remember that we've added an event listener to this button
+                            listenedElements.add(button);
+                        }
+                    });
+                }
             }
         });
+
 
         // Start observing the document with the configured parameters
         observer.observe(document.body, { childList: true, subtree: true });
         
-
-        
-        console.log('gantt',gantt )
         // Listen for the task drop event
         gantt.api.tasks.on.dblclicked((task) => {
             console.log("Task is select:", task);
