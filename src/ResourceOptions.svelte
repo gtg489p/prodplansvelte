@@ -13,7 +13,8 @@
     }
     else if($newOrEditResourceStore === 'edit'){
       let resource = resources.find(resource => resource.id === $resourceOptionsForm.id);
-
+      console.log('resources',resources)
+      console.log('resource in',resource,'$resourceOptionsForm.id',$resourceOptionsForm.id)
       let mixTimesObj = {};
       let pumpRatesObj = {};
       let fillRatesObj = {};
@@ -123,7 +124,7 @@
         $resourceOptionsForm.id = $resourceOptionsForm.selectedCategory.toLowerCase().charAt(0) + ulid();
 
         // Api POST call to add new row
-        const response = await fetch('/api/SupabaseInsertRow', {
+        const response = await fetch('/api/SupabaseInsertResource', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -149,7 +150,7 @@
       } else if ($newOrEditResourceStore === 'edit') {
 
         // Api PUT call to update row
-        const response = await fetch('/api/SupabaseUpdateRow', {
+        const response = await fetch('/api/SupabaseUpdateResource', {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
@@ -177,6 +178,57 @@
         $resourceOptionsModalStore = false;
     }
 
+    async function cloneResource(){
+        const response = await fetch(`/api/SupabaseCloneResource/${$resourceOptionsForm.id}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            const { error } = await response.json();
+            console.error('Error occurred:', error);
+            // Do something with error...
+        } else {
+            const data = await response.json();
+            toast.success(`Asset Cloned`, {position: "bottom-center", style: "border-radius: 200px; background: #333; color: #fff;"})
+            $resourceOptionsPageStore = 'type'
+            $resourceOptionsModalStore = false;
+        }
+    }
+
+
+    async function deleteResource(){
+    // Api DELETE call to remove a row
+    const response = await fetch(`/api/SupabaseDeleteResource/${$resourceOptionsForm.id}`, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+    });
+
+    if (!response.ok) {
+        const { error } = await response.json();
+        console.error('Error occurred:', error);
+        // Do something with error...
+    } else {
+        const data = await response.json();
+
+        // Reset the form now that we have successfully deleted it from the database
+        Object.keys($resourceOptionsForm).forEach(key => {$resourceOptionsForm[key] = null;});
+
+        toast.success(`Asset Removed`, {position: "bottom-center", style: "border-radius: 200px; background: #333; color: #fff;"})
+        $resourceOptionsPageStore = 'type'
+        $resourceOptionsModalStore = false;
+    }
+}
+
+
+
+
+
+
     function addRow() {
         productRateRows = [...productRateRows, {product: '', mixTime: '', pumpRate:'', fillRate: ''}];
     }
@@ -192,7 +244,7 @@
         $resourceOptionsForm.selectedPumpRates = productRateRows.map(row => ({product: row.product, pumpRate: row.pumpRate}));
         $resourceOptionsForm.selectedFillRates = productRateRows.map(row => ({product: row.product, fillRate: row.fillRate}));
         if ($resourceOptionsForm.selectedName !== null){
-          $resourceOptionsForm.selectedHeaderHtml = `<button type="button" id="${($resourceOptionsForm.selectedName ?? '').replaceAll(" ", "")}">${$resourceOptionsForm.selectedLabel}</button>`;    
+          $resourceOptionsForm.selectedHeaderHtml = `<button type="button" id="${($resourceOptionsForm.selectedName ?? '').replaceAll(" ", "")}">${$resourceOptionsForm.selectedName}: ${$resourceOptionsForm.selectedLabel}</button>`;    
         }
         if ($resourceOptionsForm.selectedCategory !== null) {
           $resourceOptionsForm.selectedClasses = 'factory-resource ' + $resourceOptionsForm.selectedCategory + '-row';
@@ -237,7 +289,7 @@
       </div>
 
       <div class="mb-6">
-        <FloatingLabelInput style="outlined" type="text" label="Label" bind:value={$resourceOptionsForm.selectedLabel}/>
+        <FloatingLabelInput style="outlined" type="text" label="Description" bind:value={$resourceOptionsForm.selectedLabel}/>
         <Helper class="ml-2" color="dark">A description</Helper>
       </div>
       
@@ -324,8 +376,10 @@
       <Button shadow="blue" gradient color="blue" on:click={()=>validateOptions()}>Done <svg aria-hidden="true" class="ml-2 -mr-1 w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg></Button>
 
   {:else if $newOrEditResourceStore == 'edit'}
-      <Button shadow="red" gradient color="red" on:click={()=>cancelModal()}>Cancel</Button>
-      <Button shadow="blue" gradient color="blue" on:click={()=>validateOptions()}>Save Changes <svg aria-hidden="true" class="ml-2 -mr-1 w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg></Button>
+      <Button shadow="yellow" outline color="alternative" on:click={()=>cancelModal()}>Cancel</Button>
+      <Button shadow="red" outline color="red" on:click={()=>deleteResource()}><span class='mr-1'>Delete</span><Icon icon="material-symbols:skull" width="22" height="22" /> </Button>
+      <Button shadow="blue" outline color="blue" on:click={()=>cloneResource()}><span class='mr-1'>Clone</span><Icon icon="clarity:clone-solid" width="22" height="22" /> </Button>
+      <Button shadow="blue" outline color="blue" on:click={()=>validateOptions()}>Save <svg aria-hidden="true" class="ml-2 -mr-1 w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg></Button>
   {/if}
 
 </form>

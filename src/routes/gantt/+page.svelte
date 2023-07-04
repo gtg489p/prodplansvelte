@@ -13,6 +13,7 @@
     import toast, { Toaster } from 'svelte-french-toast';
  
     export let data;
+    console.log('data',data)
     data.resources = parseJsonbColumns(data.resources)
 
     const currentDate = new Date();
@@ -20,6 +21,8 @@
     const currentStart = time('06:00');
     const currentEnd = time('18:00');
     
+    console.log('currentStart',currentStart.startOf('day'))
+
     // Create a map to store the original state of tasks
     let originalTaskState = {};
     
@@ -39,7 +42,7 @@
 
     let ganttData = {
         rows: data.resources,
-        tasks: data.jobs,
+        tasks: [],
         dependencies: data.dependencies,
     }
 
@@ -137,7 +140,7 @@
             throw new Error('Unexpected response format');
         }
 
-        ganttData.rows = result.resources;
+        ganttData.rows = parseJsonbColumns(result.resources);
         options.rows = ganttData.rows;
         gantt.$set(options);
 
@@ -828,7 +831,6 @@
     }
 
     function subscribe() {  
-        console.log('subscribed')
         const sse = new EventSource('/api/DbChange');  
         sse.onmessage = (e) => {  
             let server_update = JSON.parse(e.data);  
@@ -1473,7 +1475,7 @@
         {#if $resourceOptionsPageStore === 'type'}
             <ResourceTypePicker />
         {:else}
-            <ResourceOptions resources = {data.resources}/> 
+            <ResourceOptions resources = {ganttData.rows}/> 
         {/if}
     </div>
 </Modal>

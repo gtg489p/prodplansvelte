@@ -27,7 +27,7 @@
             id: 4,
             label: "Line 1"
         }, {
-            id: 5,
+            id: '52',
             label: "Line 2"
         }],
         tasks: [{
@@ -84,7 +84,7 @@
             classes: "green"
         }, {
             id: 8,
-            resourceId: 5,
+            resourceId: '52',
             label: "Job 8",
             from: time("14:30"),
             to: time("15:30"),

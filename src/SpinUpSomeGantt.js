@@ -11,7 +11,7 @@ export default function getDummyGanttData() {
       category: "Mix",
       direct: ['Filler 2','Filler 3'],
       gallons: 6000,
-      headerHtml: '<button type="button" id="MT02">MT02: 6,000 gal., DM, Jacketed.</button>'
+
     },    
     {
       id: 2,
